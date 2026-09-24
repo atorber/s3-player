@@ -89,6 +89,7 @@ fun MainScreen(viewModel: AetherViewModel) {
     val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
     val selectedTrackIds by viewModel.selectedTrackIds.collectAsStateWithLifecycle()
     val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
+    val playlistQueue by viewModel.playlistQueue.collectAsStateWithLifecycle()
 
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedFormat by viewModel.selectedFormatFilter.collectAsStateWithLifecycle()
@@ -193,7 +194,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                         onBatchCache = viewModel::batchCacheSelected,
                         onBatchPresign = viewModel::batchPresignSelected,
                         onBatchDelete = viewModel::batchDeleteSelected,
-                        onPlayTrack = viewModel::playTrack,
+                        onPlayTrack = viewModel::playTrackFromBrowser,
                         onPlayAll = viewModel::playAllInDirectory,
                         onForceScan = viewModel::forceScanNow,
                         onAddToQueue = viewModel::addToQueue,
@@ -220,18 +221,18 @@ fun MainScreen(viewModel: AetherViewModel) {
                     val activeBucket = selectedBucketName?.takeIf { it != "ALL" } ?: syncSettings.currentBucketName
                     val displayLoc = "s3://$activeBucket/${activePlaylistPath.removePrefix("/")}"
                     PlaylistScreen(
-                        tracks = tracks,
+                        tracks = playlistQueue,
                         playerState = playerState,
                         isBannerVisible = isRealtimeBannerVisible,
                         isAutoPlayNewEnabled = isAutoPlayNewEnabled,
                         monitoredLocation = displayLoc,
                         onDismissBanner = viewModel::dismissRealtimeBanner,
-                        onPlayTrack = viewModel::playTrack,
+                        onPlayTrack = viewModel::playTrackFromPlaylist,
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onStopPlayback = viewModel::stopPlayback,
                         onPlayNewArrival = {
-                            val newArrival = tracks.firstOrNull { it.id == 2L } ?: tracks.firstOrNull()
-                            newArrival?.let { viewModel.playTrack(it) }
+                            val newArrival = playlistQueue.firstOrNull { it.id == 2L } ?: playlistQueue.firstOrNull()
+                            newArrival?.let { viewModel.playTrackFromPlaylist(it) }
                             viewModel.dismissRealtimeBanner()
                         },
                         onToggleAutoPlayNew = viewModel::toggleAutoPlayNew,
@@ -258,7 +259,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                         onInspectObjectKey = { isObjectKeyDialogVisible = true },
                         onQuickListenNewArrival = {
                             val arrival = tracks.firstOrNull { it.id == 2L }
-                            arrival?.let { viewModel.playTrack(it) }
+                            arrival?.let { viewModel.playTrackFromPlaylist(it) }
                         },
                         onToggleRepeat = viewModel::toggleLoopMode,
                         onStopPlayback = viewModel::stopPlayback

@@ -85,7 +85,14 @@ class AetherAudioEngine(
     private var telemetryJob: Job? = null
     private val random = Random()
 
-    private var queue: List<S3AudioTrack> = emptyList()
+    private val _queueFlow = MutableStateFlow<List<S3AudioTrack>>(emptyList())
+    val queueFlow: StateFlow<List<S3AudioTrack>> = _queueFlow.asStateFlow()
+
+    private var queue: List<S3AudioTrack>
+        get() = _queueFlow.value
+        set(value) {
+            _queueFlow.value = value
+        }
     private var currentIndex: Int = -1
 
     fun updateQueue(tracks: List<S3AudioTrack>) {

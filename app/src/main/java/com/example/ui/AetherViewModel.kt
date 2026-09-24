@@ -420,8 +420,10 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         list
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val activePlaylistPath: StateFlow<String> = combine(playerState, _currentPrefix) { state, currPrefix ->
-        val track = state.currentTrack
+    val playlistQueue: StateFlow<List<S3AudioTrack>> = audioEngine.queueFlow
+
+    val activePlaylistPath: StateFlow<String> = combine(playerState, _currentPrefix, playlistQueue) { state, currPrefix, queue ->
+        val track = state.currentTrack ?: queue.firstOrNull()
         if (track != null) {
             val key = track.key.removePrefix("/")
             if (key.contains("/")) key.substringBeforeLast("/") + "/" else ""
@@ -431,12 +433,6 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     init {
-        // Keep audio engine queue in sync with current playlist (filtered tracks)
-        viewModelScope.launch {
-            filteredTracks.collect { tracks ->
-                audioEngine.updateQueue(tracks)
-            }
-        }
 
         // Trigger initial real S3 sync from configured bucket and base prefix
         val initialPrefix = _syncSettings.value.basePrefixPath.trim().removePrefix("/").removeSuffix("/")
@@ -492,9 +488,12 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         _isSilenceTrimmingEnabled.update { !it }
     }
 
-    // Audio Engine Actions
-    fun playTrack(track: S3AudioTrack) {
-        audioEngine.playTrack(track, filteredTracks.value)
+    fun playTrackFromBrowser(track: S3AudioTrack) {
+        audioEngine.playTrack(track, browserTracks.value)
+    }
+
+    fun playTrackFromPlaylist(track: S3AudioTrack) {
+        audioEngine.playTrack(track, null)
     }
 
     fun togglePlayPause() {
@@ -895,7 +894,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
                     val trackToPlay = newTracks.last()
                     withContext(Dispatchers.Main) {
-                        playTrack(trackToPlay)
+                        playTrackFromPlaylist(trackToPlay)
                         _toastEvent.emit("检测到新音频，自动播放：${trackToPlay.title}")
                     }
                 } else {
@@ -950,7 +949,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
                     if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
                         val trackToPlay = newTracks.last()
-                        playTrack(trackToPlay)
+                        playTrackFromPlaylist(trackToPlay)
                         _toastEvent.emit("扫描到新音频，已自动播放：${trackToPlay.title}")
                         return@launch
                     }
