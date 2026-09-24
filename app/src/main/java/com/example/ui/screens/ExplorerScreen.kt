@@ -93,7 +93,7 @@ fun ExplorerScreen(
             // "ALL BUCKETS" Chip
             val isAllSelected = selectedBucketName == null || selectedBucketName == "ALL"
             FilterPill(
-                label = "ALL S3 OBJECTS",
+                label = "全部 S3 存储桶",
                 isSelected = isAllSelected,
                 onClick = { onSelectBucket("ALL") },
                 testTag = "filter_bucket_all"
@@ -121,7 +121,7 @@ fun ExplorerScreen(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = "FORMAT //",
+                text = "格式筛选 //",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
@@ -132,7 +132,7 @@ fun ExplorerScreen(
             listOf("ALL", "FLAC", "WAV", "MP3", "OGG").forEach { fmt ->
                 val isSelected = (selectedFormatFilter ?: "ALL") == fmt
                 FormatPill(
-                    label = fmt,
+                    label = if (fmt == "ALL") "全部" else fmt,
                     isSelected = isSelected,
                     onClick = { onSelectFormat(fmt) },
                     testTag = "filter_format_$fmt"
@@ -184,7 +184,7 @@ fun ExplorerScreen(
 
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "${tracks.size} OBJECTS",
+                            text = "${tracks.size} 个音频对象",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -222,15 +222,15 @@ fun ExplorerScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "NO S3 AUDIO OBJECTS FOUND",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
+                        text = "未找到 S3 音频对象",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextMediumContrast
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Change the filter prefix or mount a new S3 bucket.",
+                        text = "请调整筛选前缀或挂载新的 S3 存储桶。",
                         fontFamily = FontFamily.SansSerif,
                         fontSize = 12.sp,
                         color = TextLowContrast
@@ -241,9 +241,9 @@ fun ExplorerScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = AwsAmber)
                     ) {
                         Text(
-                            text = "MOUNT BUCKET",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            text = "挂载存储桶",
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = AetherVoid
                         )

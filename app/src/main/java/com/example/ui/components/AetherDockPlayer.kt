@@ -172,7 +172,7 @@ fun AetherDockPlayer(
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,
-                        contentDescription = "Next Track",
+                        contentDescription = "下一首",
                         tint = TextHighContrast,
                         modifier = Modifier.size(20.dp)
                     )
@@ -199,7 +199,7 @@ fun AetherDockPlayer(
                     } else {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            contentDescription = if (isPlaying) "暂停" else "播放",
                             tint = AetherVoid,
                             modifier = Modifier.size(24.dp)
                         )

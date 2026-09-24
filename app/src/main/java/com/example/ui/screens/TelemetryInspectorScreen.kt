@@ -92,16 +92,16 @@ fun TelemetryInspectorScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = "S3 TELEMETRY & EQ ENGINE",
-                        fontFamily = FontFamily.Monospace,
+                        text = "S3 遥测与均衡器引擎",
+                        fontFamily = FontFamily.SansSerif,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextHighContrast
                     )
                     Text(
-                        text = "REAL-TIME EDGE STREAMING METRICS",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
+                        text = "实时边缘传输指标与音频分析",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 10.sp,
                         color = TextLowContrast
                     )
                 }
@@ -117,7 +117,7 @@ fun TelemetryInspectorScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
+                    contentDescription = "关闭",
                     tint = TextHighContrast,
                     modifier = Modifier.size(18.dp)
                 )
@@ -128,7 +128,7 @@ fun TelemetryInspectorScreen(
 
         // Live Network Telemetry Cards
         Text(
-            text = "LIVE S3 EDGE STREAMING TELEMETRY //",
+            text = "实时 S3 边缘传输遥测 //",
             fontFamily = FontFamily.Monospace,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
@@ -142,23 +142,23 @@ fun TelemetryInspectorScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TelemetryMetricCard(
-                title = "ROUND-TRIP PING",
+                title = "往返延迟 (RTT)",
                 value = "${telemetry.latencyMs} ms",
-                subtext = "TLS 1.3 // Edge",
+                subtext = "TLS 1.3 // 边缘节点",
                 accentColor = StatusGreen,
                 modifier = Modifier.weight(1f)
             )
             TelemetryMetricCard(
-                title = "THROUGHPUT",
+                title = "实时传输吞吐率",
                 value = String.format("%.2f MB/s", telemetry.throughputMBs),
-                subtext = "Chunk Transfer",
+                subtext = "分块实时传输",
                 accentColor = ElectricCyan,
                 modifier = Modifier.weight(1f)
             )
             TelemetryMetricCard(
-                title = "PACKET JITTER",
+                title = "数据包抖动",
                 value = String.format("%.2f ms", telemetry.jitterMs),
-                subtext = "Loss 0.00%",
+                subtext = "丢包率 0.00%",
                 accentColor = AwsAmber,
                 modifier = Modifier.weight(1f)
             )
@@ -168,7 +168,7 @@ fun TelemetryInspectorScreen(
 
         // Raw HTTP S3 Headers Table
         Text(
-            text = "AUTHENTICATED S3 METADATA HEADERS //",
+            text = "S3 鉴权元数据响应头 //",
             fontFamily = FontFamily.Monospace,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
@@ -188,7 +188,7 @@ fun TelemetryInspectorScreen(
             HeaderRow("x-amz-request-id", "7H9A2Q0K1P4R8T9S")
             HeaderRow("ETag (MD5 Checksum)", track?.etag ?: "\"e4d909c29af5731b8d234a91f421c002\"")
             HeaderRow("Content-Type", "audio/${track?.format?.lowercase() ?: "flac"}")
-            HeaderRow("Content-Length", "${track?.sizeBytes ?: 48291040} bytes (${track?.sizeFormatted ?: "48.2 MB"})")
+            HeaderRow("Content-Length", "${track?.sizeBytes ?: 48291040} 字节 (${track?.sizeFormatted ?: "48.2 MB"})")
             HeaderRow("x-amz-server-side-encryption", "AES256")
             HeaderRow("x-amz-storage-class", track?.storageClass ?: "EXPRESS_ONEZONE")
             HeaderRow("Accept-Ranges", "bytes 0-48291039")
@@ -206,16 +206,16 @@ fun TelemetryInspectorScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "5-BAND EQUALIZER & STEM SHAPER //",
+                text = "5段均衡器与分轨调音 //",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = AwsAmber
             )
             Text(
-                text = "ACTIVE: ${playerState.eqPreset.label.uppercase()}",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
+                text = "当前预设: ${playerState.eqPreset.label}",
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 11.sp,
                 color = ElectricCyan
             )
         }

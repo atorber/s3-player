@@ -107,7 +107,7 @@ fun AetherTopBar(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "// S3 AUDIO",
+                            text = "// S3 音频流",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -115,9 +115,9 @@ fun AetherTopBar(
                         )
                     }
                     Text(
-                        text = "HIGH-PRECISION CLOUD STREAMING",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 8.sp,
+                        text = "高精度云端实时流播放器",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Medium,
                         letterSpacing = 0.5.sp,
                         color = TextLowContrast
@@ -149,7 +149,7 @@ fun AetherTopBar(
                 ) {
                     Icon(
                         imageVector = Icons.Default.GraphicEq,
-                        contentDescription = "Open Telemetry Inspector",
+                        contentDescription = "打开遥测分析仪",
                         tint = ElectricCyan,
                         modifier = Modifier.size(18.dp)
                     )
@@ -167,7 +167,7 @@ fun AetherTopBar(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
-                        contentDescription = "Mount S3 Bucket",
+                        contentDescription = "挂载 S3 存储桶",
                         tint = AetherVoid,
                         modifier = Modifier.size(20.dp)
                     )
@@ -221,8 +221,8 @@ fun AetherTopBar(
                 ) {
                     if (searchQuery.isEmpty()) {
                         Text(
-                            text = "filter prefix or track key...",
-                            fontFamily = FontFamily.Monospace,
+                            text = "筛选前缀或音频键名...",
+                            fontFamily = FontFamily.SansSerif,
                             fontSize = 12.sp,
                             color = TextLowContrast
                         )
@@ -253,7 +253,7 @@ fun AetherTopBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Clear search",
+                            contentDescription = "清除搜索",
                             tint = TextLowContrast,
                             modifier = Modifier.size(16.dp)
                         )
@@ -261,7 +261,7 @@ fun AetherTopBar(
                 } else {
                     Icon(
                         imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
+                        contentDescription = "搜索",
                         tint = TextLowContrast,
                         modifier = Modifier.size(18.dp)
                     )

@@ -9,7 +9,7 @@ import com.example.data.model.S3Bucket
 
 @Database(
     entities = [S3AudioTrack::class, S3Bucket::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AetherDatabase : RoomDatabase() {

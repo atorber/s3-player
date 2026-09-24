@@ -36,11 +36,11 @@ enum class LoopMode {
 }
 
 enum class EqPreset(val label: String, val bands: List<Float>) {
-    FLAT("Flat Clean", listOf(0f, 0f, 0f, 0f, 0f)),
-    BASS_BOOST("Sub-Bass +6dB", listOf(6f, 4f, 1f, 0f, -1f)),
-    ACOUSTIC_HIFI("Hi-Fi Master", listOf(2f, 1f, -1f, 2f, 4f)),
-    BROADCAST_VOCALS("Stems Clarity", listOf(-2f, 1f, 4f, 3f, 1f)),
-    TELEMETRY_FILTER("Telemetry Narrow", listOf(-4f, 0f, 5f, 2f, -6f))
+    FLAT("原声平直", listOf(0f, 0f, 0f, 0f, 0f)),
+    BASS_BOOST("重低音增强", listOf(6f, 4f, 1f, 0f, -1f)),
+    ACOUSTIC_HIFI("Hi-Fi母带", listOf(2f, 1f, -1f, 2f, 4f)),
+    BROADCAST_VOCALS("分轨清晰", listOf(-2f, 1f, 4f, 3f, 1f)),
+    TELEMETRY_FILTER("遥测滤波", listOf(-4f, 0f, 5f, 2f, -6f))
 }
 
 data class TelemetryMetrics(

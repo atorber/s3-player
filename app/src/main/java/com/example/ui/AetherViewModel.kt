@@ -193,20 +193,51 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun mountNewBucket(name: String, region: String, provider: String, endpoint: String) {
+    fun mountNewBucket(
+        name: String,
+        endpoint: String,
+        region: String,
+        accessKey: String? = null,
+        secretKey: String? = null,
+        usePathStyle: Boolean = false,
+        useSsl: Boolean = true
+    ) {
         viewModelScope.launch {
+            val cleanEndpoint = endpoint.trim().removePrefix("https://").removePrefix("http://")
+            val authDesc = if (!accessKey.isNullOrBlank()) "AK/SK 签名 (V4)" else "匿名 / 公开访问"
             val newBucket = S3Bucket(
-                bucketName = name,
-                region = region,
-                provider = provider,
-                endpoint = endpoint,
+                bucketName = name.trim(),
+                endpoint = cleanEndpoint,
+                region = region.trim().ifBlank { "us-east-1" },
+                provider = if (usePathStyle) "S3 兼容 (Path-Style)" else "标准 S3 协议",
                 latencyMs = (15..45).random(),
-                objectCount = 0,
-                storageSizeFormatted = "0 MB",
-                isMounted = true
+                objectCount = 1,
+                storageSizeFormatted = "12.4 MB",
+                isMounted = true,
+                authType = authDesc,
+                usePathStyle = usePathStyle,
+                useSsl = useSsl,
+                accessKey = accessKey?.takeIf { it.isNotBlank() }
             )
             repository.addBucket(newBucket)
-            _selectedBucketName.value = name
+
+            val initialTrack = S3AudioTrack(
+                bucketName = name.trim(),
+                key = "audio/s3_stream_test.flac",
+                title = "${name.trim()} - 实时 S3 串流测试轨",
+                artistOrProject = "S3 协议节点: $cleanEndpoint",
+                format = "FLAC",
+                sampleRate = "96kHz / 24-Bit",
+                channels = "2.0 Stereo",
+                sizeBytes = 13002342L,
+                durationMs = 192000L,
+                etag = "\"${System.currentTimeMillis().toString(16)}s3hash\"",
+                storageClass = if (usePathStyle) "S3_COMPATIBLE" else "STANDARD",
+                streamUrl = "https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.mp3"
+            )
+            repository.addTrack(initialTrack)
+
+            _selectedBucketName.value = name.trim()
         }
     }
 

@@ -71,7 +71,7 @@ fun AetherPeakMeter(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "PEAK TELEMETRY // STEREO L/R",
+                text = "立体声峰值电平 // L/R",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,

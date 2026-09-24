@@ -76,16 +76,16 @@ fun BucketsManagerScreen(
         ) {
             Column {
                 Text(
-                    text = "CLOUD S3 BUCKET MOUNTS",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp,
+                    text = "S3 兼容存储桶挂载列表",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextHighContrast
                 )
                 Text(
-                    text = "ACTIVE S3 / R2 / MINIO REPOSITORIES",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    text = "适配标准 S3 REST 协议 • 兼容任意云厂商与自建集群",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 10.sp,
                     color = TextLowContrast
                 )
             }
@@ -105,9 +105,9 @@ fun BucketsManagerScreen(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "MOUNT S3",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
+                    text = "挂载存储桶",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = AetherVoid
                 )
@@ -187,7 +187,7 @@ private fun BucketItemCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${bucket.provider} • ${bucket.endpoint}",
+                        text = "${if (bucket.useSsl) "https://" else "http://"}${bucket.endpoint}",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         color = TextLowContrast
@@ -217,6 +217,11 @@ private fun BucketItemCard(
                     textColor = TextMediumContrast
                 )
                 AetherStatusChip(
+                    label = if (bucket.usePathStyle) "Path-Style" else "Virtual-Host",
+                    borderColor = BorderSubtle,
+                    textColor = if (bucket.usePathStyle) AwsAmber else TextLowContrast
+                )
+                AetherStatusChip(
                     label = bucket.authType,
                     borderColor = BorderSubtle,
                     textColor = TextLowContrast
@@ -224,7 +229,7 @@ private fun BucketItemCard(
             }
 
             Text(
-                text = "${bucket.objectCount} Objects • ${bucket.storageSizeFormatted}",
+                text = "${bucket.objectCount} 个对象 • ${bucket.storageSizeFormatted}",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,

@@ -8,46 +8,54 @@ object SampleData {
         S3Bucket(
             bucketName = "prod-audio-stems",
             region = "us-east-1",
-            provider = "AWS S3",
+            provider = "S3 协议 (公有/私有)",
             endpoint = "s3.us-east-1.amazonaws.com",
             latencyMs = 28,
             objectCount = 142,
             storageSizeFormatted = "18.4 GB",
             isMounted = true,
-            authType = "IAM Signature V4"
+            authType = "S3 Signature V4",
+            usePathStyle = false,
+            useSsl = true
         ),
         S3Bucket(
             bucketName = "archive-masters-flac",
             region = "eu-west-1",
-            provider = "AWS S3 Glacier Instant",
+            provider = "S3 协议 (冷存/归档)",
             endpoint = "s3.eu-west-1.amazonaws.com",
             latencyMs = 36,
             objectCount = 890,
             storageSizeFormatted = "124.6 GB",
             isMounted = true,
-            authType = "IAM Role"
+            authType = "S3 签名认证",
+            usePathStyle = false,
+            useSsl = true
         ),
         S3Bucket(
             bucketName = "spatial-atmos-lossless",
-            region = "ap-northeast-1",
-            provider = "Cloudflare R2",
+            region = "auto",
+            provider = "S3 兼容协议 (高速边缘)",
             endpoint = "r2.cloudflarestorage.com",
             latencyMs = 45,
             objectCount = 64,
             storageSizeFormatted = "32.1 GB",
             isMounted = true,
-            authType = "S3 Compatible"
+            authType = "S3 兼容认证",
+            usePathStyle = false,
+            useSsl = true
         ),
         S3Bucket(
             bucketName = "soundfx-telemetry-v3",
             region = "us-west-2",
-            provider = "AWS Express OneZone",
-            endpoint = "s3express-usw2-az1.amazonaws.com",
+            provider = "自建/内网 S3 (MinIO/Ceph)",
+            endpoint = "minio.internal:9000",
             latencyMs = 12,
             objectCount = 412,
             storageSizeFormatted = "8.9 GB",
-            isMounted = false,
-            authType = "Public Read"
+            isMounted = true,
+            authType = "Path-Style / HTTP",
+            usePathStyle = true,
+            useSsl = false
         )
     )
 

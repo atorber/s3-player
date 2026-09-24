@@ -114,14 +114,14 @@ fun MainScreen(viewModel: AetherViewModel) {
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.CloudQueue,
-                                contentDescription = "S3 Explorer"
+                                contentDescription = "S3 对象浏览"
                             )
                         },
                         label = {
                             Text(
-                                "EXPLORER",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
+                                "对象浏览",
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         },
@@ -141,14 +141,14 @@ fun MainScreen(viewModel: AetherViewModel) {
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Storage,
-                                contentDescription = "Cloud Buckets"
+                                contentDescription = "存储桶管理"
                             )
                         },
                         label = {
                             Text(
-                                "BUCKETS",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
+                                "存储桶",
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         },
@@ -168,14 +168,14 @@ fun MainScreen(viewModel: AetherViewModel) {
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Bookmark,
-                                contentDescription = "Bookmarked Tracks"
+                                contentDescription = "我的收藏"
                             )
                         },
                         label = {
                             Text(
-                                "BOOKMARKS",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
+                                "我的收藏",
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         },
@@ -195,14 +195,14 @@ fun MainScreen(viewModel: AetherViewModel) {
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.GraphicEq,
-                                contentDescription = "Telemetry & EQ"
+                                contentDescription = "音频遥测与EQ"
                             )
                         },
                         label = {
                             Text(
-                                "TELEMETRY",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
+                                "音频遥测",
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         },
@@ -318,8 +318,8 @@ fun MainScreen(viewModel: AetherViewModel) {
             if (navState.isMountBucketDialogVisible) {
                 MountBucketDialog(
                     onDismiss = { viewModel.setMountBucketDialogVisible(false) },
-                    onMount = { name, reg, prov, endpoint ->
-                        viewModel.mountNewBucket(name, reg, prov, endpoint)
+                    onMount = { name, endpoint, reg, ak, sk, usePathStyle, useSsl ->
+                        viewModel.mountNewBucket(name, endpoint, reg, ak, sk, usePathStyle, useSsl)
                     }
                 )
             }

@@ -77,10 +77,10 @@ fun AetherTrackItem(
     }
 
     val transmissionLabel = when {
-        track.isCachedLocally -> "CACHED"
-        isCurrentTrack && isPlaying -> "STREAMING"
-        isCurrentTrack -> "QUEUED"
-        else -> "S3 EDGE"
+        track.isCachedLocally -> "已缓存"
+        isCurrentTrack && isPlaying -> "串流中"
+        isCurrentTrack -> "等待中"
+        else -> "S3节点"
     }
 
     Row(
@@ -187,7 +187,7 @@ fun AetherTrackItem(
         ) {
             Icon(
                 imageVector = if (track.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                contentDescription = if (track.isFavorite) "Remove Bookmark" else "Bookmark Track",
+                contentDescription = if (track.isFavorite) "取消收藏" else "加入收藏",
                 tint = if (track.isFavorite) AwsAmber else TextLowContrast,
                 modifier = Modifier.size(18.dp)
             )

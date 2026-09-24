@@ -175,7 +175,7 @@ fun ExpandedPlayerScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Collapse Player",
+                    contentDescription = "收起播放器",
                     tint = TextHighContrast,
                     modifier = Modifier.size(24.dp)
                 )
@@ -183,9 +183,9 @@ fun ExpandedPlayerScreen(
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "S3 STREAM CONSOLE",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
+                    text = "S3 流媒体控制台",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
                     color = ElectricCyan
@@ -208,7 +208,7 @@ fun ExpandedPlayerScreen(
                 ) {
                     Icon(
                         imageVector = if (track.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = "Bookmark",
+                        contentDescription = "收藏",
                         tint = if (track.isFavorite) AwsAmber else TextLowContrast,
                         modifier = Modifier.size(18.dp)
                     )
@@ -226,7 +226,7 @@ fun ExpandedPlayerScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.GraphicEq,
-                        contentDescription = "Audio Telemetry & Headers",
+                        contentDescription = "音频遥测与S3响应头",
                         tint = ElectricCyan,
                         modifier = Modifier.size(18.dp)
                     )
@@ -331,7 +331,7 @@ fun ExpandedPlayerScreen(
                 textColor = AwsAmber
             )
             AetherStatusChip(
-                label = "BUF ${playerState.bufferPercentage}%",
+                label = "缓冲 ${playerState.bufferPercentage}%",
                 indicatorColor = if (playerState.bufferPercentage > 50) StatusGreen else AwsAmber,
                 borderColor = BorderSubtle,
                 textColor = TextMediumContrast
@@ -408,7 +408,7 @@ fun ExpandedPlayerScreen(
                 val loopTint = if (playerState.loopMode != LoopMode.OFF) AwsAmber else TextLowContrast
                 Icon(
                     imageVector = loopIcon,
-                    contentDescription = "Loop Mode",
+                    contentDescription = "循环模式",
                     tint = loopTint,
                     modifier = Modifier.size(22.dp)
                 )
@@ -423,7 +423,7 @@ fun ExpandedPlayerScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.FastRewind,
-                    contentDescription = "Back 10s",
+                    contentDescription = "后退10秒",
                     tint = TextHighContrast,
                     modifier = Modifier.size(26.dp)
                 )
@@ -464,7 +464,7 @@ fun ExpandedPlayerScreen(
                     } else {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            contentDescription = if (isPlaying) "暂停" else "播放",
                             tint = AetherVoid,
                             modifier = Modifier.size(32.dp)
                         )
@@ -481,7 +481,7 @@ fun ExpandedPlayerScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.FastForward,
-                    contentDescription = "Forward 10s",
+                    contentDescription = "快进10秒",
                     tint = TextHighContrast,
                     modifier = Modifier.size(26.dp)
                 )
@@ -496,7 +496,7 @@ fun ExpandedPlayerScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Next Track",
+                    contentDescription = "下一首",
                     tint = TextHighContrast,
                     modifier = Modifier.size(24.dp)
                 )
@@ -519,9 +519,9 @@ fun ExpandedPlayerScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "A-B LOOP:",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
+                    text = "A-B 循环:",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextLowContrast
                 )
@@ -536,7 +536,7 @@ fun ExpandedPlayerScreen(
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = if (playerState.abPointA != null) "A: ${(playerState.abPointA / 1000)}s" else "[A]",
+                        text = if (playerState.abPointA != null) "A: ${(playerState.abPointA / 1000)}s" else "[A点]",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -554,7 +554,7 @@ fun ExpandedPlayerScreen(
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = if (playerState.abPointB != null) "B: ${(playerState.abPointB / 1000)}s" else "[B]",
+                        text = if (playerState.abPointB != null) "B: ${(playerState.abPointB / 1000)}s" else "[B点]",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -564,9 +564,9 @@ fun ExpandedPlayerScreen(
 
                 if (playerState.abPointA != null || playerState.abPointB != null) {
                     Text(
-                        text = "CLR",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
+                        text = "清除",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFEF4444),
                         modifier = Modifier
@@ -631,16 +631,16 @@ fun ExpandedPlayerScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "INSPECT S3 HEADERS & EQ ENGINE",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
+                        text = "查看 S3 响应头与 EQ 调音台",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = ElectricCyan
                     )
                 }
 
                 Text(
-                    text = "MD5 // 5-BAND EQ >",
+                    text = "MD5校验 // 5段EQ >",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
                     color = TextMediumContrast
