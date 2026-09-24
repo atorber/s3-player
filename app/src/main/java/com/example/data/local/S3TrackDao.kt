@@ -43,6 +43,9 @@ interface S3TrackDao {
     @Query("DELETE FROM s3_audio_tracks WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("DELETE FROM s3_audio_tracks WHERE bucketName = :bucketName")
+    suspend fun clearBucketTracks(bucketName: String)
+
     @Query("DELETE FROM s3_audio_tracks")
-    suspend fun deleteAll()
+    suspend fun clearAllTracks()
 }

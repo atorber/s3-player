@@ -1,37 +1,48 @@
 package com.example.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -40,21 +51,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.AetherDockPlayer
+import com.example.ui.components.AetherNavBar
 import com.example.ui.components.AetherTopBar
-import com.example.ui.screens.BucketsManagerScreen
-import com.example.ui.screens.ExpandedPlayerScreen
-import com.example.ui.screens.ExplorerScreen
+import com.example.ui.screens.BrowserScreen
 import com.example.ui.screens.MountBucketDialog
+import com.example.ui.screens.PlayerScreen
+import com.example.ui.screens.PlaylistScreen
+import com.example.ui.screens.SyncSettingsScreen
 import com.example.ui.screens.TelemetryInspectorScreen
 import com.example.ui.theme.AetherSurface
-import com.example.ui.theme.AetherSurfaceTier1
 import com.example.ui.theme.AetherVoid
 import com.example.ui.theme.AwsAmber
-import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.ElectricCyan
+import com.example.ui.theme.ElectricCyanDark
+import com.example.ui.theme.SurfaceContainer
+import com.example.ui.theme.SurfaceContainerHigh
+import com.example.ui.theme.SurfaceContainerLowest
 import com.example.ui.theme.TextHighContrast
 import com.example.ui.theme.TextLowContrast
-import com.example.ui.theme.TextMediumContrast
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,12 +78,39 @@ fun MainScreen(viewModel: AetherViewModel) {
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val navState by viewModel.navState.collectAsStateWithLifecycle()
     val tracks by viewModel.filteredTracks.collectAsStateWithLifecycle()
-    val buckets by viewModel.allBuckets.collectAsStateWithLifecycle()
+    val browserTracks by viewModel.browserTracks.collectAsStateWithLifecycle()
+    val browserFolders by viewModel.browserFolders.collectAsStateWithLifecycle()
+    val formatCounts by viewModel.formatCounts.collectAsStateWithLifecycle()
+    val allBuckets by viewModel.allBuckets.collectAsStateWithLifecycle()
     val selectedBucketName by viewModel.selectedBucketName.collectAsStateWithLifecycle()
-    val selectedFormat by viewModel.selectedFormatFilter.collectAsStateWithLifecycle()
-    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val currentPrefix by viewModel.currentPrefix.collectAsStateWithLifecycle()
+    val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
+    val isGridView by viewModel.isGridView.collectAsStateWithLifecycle()
+    val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
+    val selectedTrackIds by viewModel.selectedTrackIds.collectAsStateWithLifecycle()
+    val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val selectedFormat by viewModel.selectedFormatFilter.collectAsStateWithLifecycle()
+    val isRealtimeBannerVisible by viewModel.isRealtimeBannerVisible.collectAsStateWithLifecycle()
+    val isRecursiveScan by viewModel.isRecursiveScan.collectAsStateWithLifecycle()
+    val directoryTiers by viewModel.directoryTiers.collectAsStateWithLifecycle()
+    val syncSettings by viewModel.syncSettings.collectAsStateWithLifecycle()
+    val isAutoPlayNewEnabled by viewModel.isAutoPlayNewEnabled.collectAsStateWithLifecycle()
+    val isPitchCorrectionEnabled by viewModel.isPitchCorrectionEnabled.collectAsStateWithLifecycle()
+    val isSilenceTrimmingEnabled by viewModel.isSilenceTrimmingEnabled.collectAsStateWithLifecycle()
+
+    var toastMessage by remember { mutableStateOf<String?>(null) }
+    var isObjectKeyDialogVisible by remember { mutableStateOf(false) }
+
+    // Collect Toast notifications
+    LaunchedEffect(Unit) {
+        viewModel.toastEvent.collectLatest { msg ->
+            toastMessage = msg
+            delay(3500)
+            toastMessage = null
+        }
+    }
 
     Scaffold(
         modifier = Modifier
@@ -76,13 +119,10 @@ fun MainScreen(viewModel: AetherViewModel) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             AetherTopBar(
-                currentBucketName = selectedBucketName,
-                searchQuery = searchQuery,
-                onSearchChange = viewModel::setSearchQuery,
-                onOpenMountDialog = { viewModel.setMountBucketDialogVisible(true) },
-                onOpenTelemetryInspector = { viewModel.setTelemetryInspectorVisible(true) },
-                latencyMs = playerState.telemetry.latencyMs,
-                activeRegion = buckets.firstOrNull { it.bucketName == selectedBucketName }?.region ?: "us-east-1",
+                activeTab = navState.activeTab,
+                currentUri = "s3://${syncSettings.currentBucketName}${if (syncSettings.basePrefixPath.startsWith("/")) syncSettings.basePrefixPath else if (syncSettings.basePrefixPath.isBlank()) "/" else "/${syncSettings.basePrefixPath}"}",
+                onOpenSyncStatus = { viewModel.setTelemetryInspectorVisible(true) },
+                onProfileClick = { viewModel.setActiveTab(3) },
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
             )
         },
@@ -92,130 +132,22 @@ fun MainScreen(viewModel: AetherViewModel) {
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.navigationBars)
             ) {
-                // Persistent Floating Dock Player (above bottom bar when track loaded)
-                if (playerState.currentTrack != null) {
+                // Persistent Floating Dock Player (visible on tabs other than full player)
+                if (navState.activeTab != 2 && playerState.currentTrack != null) {
                     AetherDockPlayer(
                         playerState = playerState,
-                        onExpandPlayer = { viewModel.setExpandedPlayerVisible(true) },
+                        onExpandPlayer = { viewModel.setActiveTab(2) },
                         onTogglePlayPause = viewModel::togglePlayPause,
-                        onPlayNext = viewModel::playNext
+                        onSkipBackward10 = viewModel::skipBackward10s,
+                        onSkipForward30 = viewModel::skipForward30s
                     )
                 }
 
-                // High-precision Industrial Bottom Navigation
-                NavigationBar(
-                    containerColor = AetherSurfaceTier1,
-                    contentColor = TextHighContrast,
-                    modifier = Modifier.border(1.dp, BorderSubtle)
-                ) {
-                    NavigationBarItem(
-                        selected = navState.activeTab == 0,
-                        onClick = { viewModel.setActiveTab(0) },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.CloudQueue,
-                                contentDescription = "S3 对象浏览"
-                            )
-                        },
-                        label = {
-                            Text(
-                                "对象浏览",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = AwsAmber,
-                            selectedTextColor = AwsAmber,
-                            unselectedIconColor = TextLowContrast,
-                            unselectedTextColor = TextLowContrast,
-                            indicatorColor = AetherSurface
-                        ),
-                        modifier = Modifier.testTag("nav_tab_explorer")
-                    )
-
-                    NavigationBarItem(
-                        selected = navState.activeTab == 1,
-                        onClick = { viewModel.setActiveTab(1) },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Storage,
-                                contentDescription = "存储桶管理"
-                            )
-                        },
-                        label = {
-                            Text(
-                                "存储桶",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = ElectricCyan,
-                            selectedTextColor = ElectricCyan,
-                            unselectedIconColor = TextLowContrast,
-                            unselectedTextColor = TextLowContrast,
-                            indicatorColor = AetherSurface
-                        ),
-                        modifier = Modifier.testTag("nav_tab_buckets")
-                    )
-
-                    NavigationBarItem(
-                        selected = navState.activeTab == 2,
-                        onClick = { viewModel.setActiveTab(2) },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Bookmark,
-                                contentDescription = "我的收藏"
-                            )
-                        },
-                        label = {
-                            Text(
-                                "我的收藏",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = AwsAmber,
-                            selectedTextColor = AwsAmber,
-                            unselectedIconColor = TextLowContrast,
-                            unselectedTextColor = TextLowContrast,
-                            indicatorColor = AetherSurface
-                        ),
-                        modifier = Modifier.testTag("nav_tab_favorites")
-                    )
-
-                    NavigationBarItem(
-                        selected = navState.activeTab == 3,
-                        onClick = { viewModel.setActiveTab(3) },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.GraphicEq,
-                                contentDescription = "音频遥测与EQ"
-                            )
-                        },
-                        label = {
-                            Text(
-                                "音频遥测",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = ElectricCyan,
-                            selectedTextColor = ElectricCyan,
-                            unselectedIconColor = TextLowContrast,
-                            unselectedTextColor = TextLowContrast,
-                            indicatorColor = AetherSurface
-                        ),
-                        modifier = Modifier.testTag("nav_tab_telemetry")
-                    )
-                }
+                // 4-Tab Bottom Navigation Bar
+                AetherNavBar(
+                    activeTab = navState.activeTab,
+                    onTabSelected = viewModel::setActiveTab
+                )
             }
         }
     ) { innerPadding ->
@@ -225,78 +157,238 @@ fun MainScreen(viewModel: AetherViewModel) {
                 .padding(innerPadding)
         ) {
             when (navState.activeTab) {
-                0, 2 -> {
-                    ExplorerScreen(
-                        tracks = tracks,
-                        buckets = buckets,
-                        selectedBucketName = selectedBucketName,
-                        selectedFormatFilter = selectedFormat,
+                0 -> {
+                    // Screen 1: 文件浏览 (Browser)
+                    BrowserScreen(
+                        currentBucket = selectedBucketName ?: "xtrader",
+                        allBuckets = allBuckets,
+                        currentPrefix = currentPrefix,
+                        folders = browserFolders,
+                        tracks = browserTracks,
                         playerState = playerState,
+                        searchQuery = searchQuery,
+                        selectedFormat = selectedFormat,
+                        formatCounts = formatCounts,
+                        sortMode = sortMode,
+                        isGridView = isGridView,
+                        isSelectionMode = isSelectionMode,
+                        selectedTrackIds = selectedTrackIds,
+                        isRecursiveScan = isRecursiveScan,
+                        isScanning = isScanning,
                         onSelectBucket = viewModel::selectBucket,
+                        onNavigateToPrefix = viewModel::navigateToPrefix,
+                        onNavigateUp = viewModel::navigateUp,
+                        onNavigateToRoot = viewModel::navigateToRoot,
+                        onSearchChange = viewModel::setSearchQuery,
                         onSelectFormat = viewModel::setFormatFilter,
-                        onTrackClick = viewModel::playTrack,
+                        onToggleRecursiveScan = viewModel::toggleRecursiveScan,
+                        onSetSortMode = viewModel::setSortMode,
+                        onToggleGridView = viewModel::toggleGridView,
+                        onToggleSelectionMode = viewModel::toggleSelectionMode,
+                        onToggleTrackSelection = viewModel::toggleTrackSelection,
+                        onSelectAll = viewModel::selectAll,
+                        onClearSelection = viewModel::clearSelection,
+                        onBatchPlay = viewModel::batchPlaySelected,
+                        onBatchAddToQueue = viewModel::batchAddSelectedToQueue,
+                        onBatchCache = viewModel::batchCacheSelected,
+                        onBatchPresign = viewModel::batchPresignSelected,
+                        onBatchDelete = viewModel::batchDeleteSelected,
+                        onPlayTrack = viewModel::playTrack,
+                        onPlayAll = viewModel::playAllInDirectory,
+                        onForceScan = viewModel::forceScanNow,
+                        onAddToQueue = viewModel::addToQueue,
                         onToggleFavorite = viewModel::toggleFavorite,
                         onToggleCache = viewModel::toggleCacheLocally,
-                        onOpenMountDialog = { viewModel.setMountBucketDialogVisible(true) }
+                        onDeleteTrack = viewModel::deleteTrack,
+                        onCopyPresignedUrl = viewModel::copyTrackPresignedUrl,
+                        onCopyS3Uri = viewModel::copyTrackS3Uri,
+                        onShowTrackDetails = viewModel::showTrackDetails,
+                        onCreateFolder = viewModel::createNewFolder,
+                        onUploadTrack = viewModel::uploadNewTrack,
+                        directoryTiers = directoryTiers,
+                        onLocatePlayingTrack = viewModel::locateCurrentPlayingTrackDirectory,
+                        onAddFolderToPlaylist = viewModel::addFolderToPlaylist,
+                        onPlayFolder = viewModel::playFolder,
+                        onAddCurrentDirectoryToPlaylist = viewModel::addCurrentDirectoryToPlaylist,
+                        syncBasePrefix = syncSettings.basePrefixPath,
+                        onNavigateToSyncBase = viewModel::navigateToSyncBase
                     )
                 }
                 1 -> {
-                    BucketsManagerScreen(
-                        buckets = buckets,
-                        selectedBucketName = selectedBucketName,
-                        onSelectBucket = {
-                            viewModel.selectBucket(it)
-                            viewModel.setActiveTab(0)
+                    // Screen 2: 播放列表 (Playlist)
+                    val activeBucket = selectedBucketName?.takeIf { it != "ALL" } ?: syncSettings.currentBucketName
+                    val displayLoc = "s3://$activeBucket/${currentPrefix.removePrefix("/")}"
+                    PlaylistScreen(
+                        tracks = tracks,
+                        playerState = playerState,
+                        isBannerVisible = isRealtimeBannerVisible,
+                        isAutoPlayNewEnabled = isAutoPlayNewEnabled,
+                        monitoredLocation = displayLoc,
+                        onDismissBanner = viewModel::dismissRealtimeBanner,
+                        onPlayTrack = viewModel::playTrack,
+                        onTogglePlayPause = viewModel::togglePlayPause,
+                        onStopPlayback = viewModel::stopPlayback,
+                        onPlayNewArrival = {
+                            val newArrival = tracks.firstOrNull { it.id == 2L } ?: tracks.firstOrNull()
+                            newArrival?.let { viewModel.playTrack(it) }
+                            viewModel.dismissRealtimeBanner()
                         },
-                        onOpenMountDialog = { viewModel.setMountBucketDialogVisible(true) }
+                        onToggleAutoPlayNew = viewModel::toggleAutoPlayNew,
+                        onToggleRepeat = viewModel::toggleLoopMode,
+                        onClearPlayed = { /* Cleared */ },
+                    )
+                }
+                2 -> {
+                    // Screen 3: 正在播放 / 沉浸式播放器 (Player)
+                    PlayerScreen(
+                        playerState = playerState,
+                        fallbackTrack = tracks.firstOrNull(),
+                        isPitchCorrectionEnabled = isPitchCorrectionEnabled,
+                        isSilenceTrimmingEnabled = isSilenceTrimmingEnabled,
+                        onTogglePlayPause = viewModel::togglePlayPause,
+                        onSeekTo = viewModel::seekTo,
+                        onSkipBackward15 = viewModel::skipBackward15s,
+                        onSkipForward30 = viewModel::skipForward30s,
+                        onPlayNext = viewModel::playNext,
+                        onPlayPrevious = viewModel::playPrevious,
+                        onSetPlaybackSpeed = viewModel::setPlaybackSpeed,
+                        onTogglePitchCorrection = viewModel::togglePitchCorrection,
+                        onToggleSilenceTrimming = viewModel::toggleSilenceTrimming,
+                        onInspectObjectKey = { isObjectKeyDialogVisible = true },
+                        onQuickListenNewArrival = {
+                            val arrival = tracks.firstOrNull { it.id == 2L }
+                            arrival?.let { viewModel.playTrack(it) }
+                        },
+                        onToggleRepeat = viewModel::toggleLoopMode,
+                        onStopPlayback = viewModel::stopPlayback
                     )
                 }
                 3 -> {
-                    TelemetryInspectorScreen(
-                        playerState = playerState,
-                        onClose = { viewModel.setActiveTab(0) },
-                        onSetEqPreset = viewModel::setEqPreset,
-                        onSetBand = viewModel::setCustomEqBand
+                    // Screen 4: 同步设置 (Sync Settings)
+                    SyncSettingsScreen(
+                        settings = syncSettings,
+                        onUpdatePollInterval = viewModel::updatePollInterval,
+                        onSetEnqueueRule = viewModel::setEnqueueRule,
+                        onTogglePublicAccess = viewModel::togglePublicAccess,
+                        onToggleSubdirMonitoring = viewModel::toggleSubdirMonitoring,
+                        onToggleSnsNotification = viewModel::toggleSnsNotification,
+                        onToggleFormatEnabled = viewModel::toggleFormatEnabled,
+                        onRunPingTest = { ep, bk -> viewModel.runPingTest(ep, bk) },
+                        onClearCache = viewModel::clearCache,
+                        onExportM3u8 = viewModel::exportM3u8,
+                        onSaveAndRestart = { b, p, ep, reg, ak, sk, tok, ps, ssl, pub ->
+                            viewModel.saveAndRestartSync(b, p, ep, reg, ak, sk, tok, ps, ssl, pub)
+                        }
                     )
                 }
             }
 
-            // Expanded Player Bottom Sheet
-            if (navState.isExpandedPlayerVisible && playerState.currentTrack != null) {
-                ModalBottomSheet(
-                    onDismissRequest = { viewModel.setExpandedPlayerVisible(false) },
-                    sheetState = sheetState,
-                    containerColor = AetherVoid,
-                    dragHandle = null,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    ExpandedPlayerScreen(
-                        playerState = playerState,
-                        onCollapse = { viewModel.setExpandedPlayerVisible(false) },
-                        onTogglePlayPause = viewModel::togglePlayPause,
-                        onSeekTo = viewModel::seekTo,
-                        onScrub = viewModel::setScrubbing,
-                        onSkipForward10s = viewModel::skipForward10s,
-                        onSkipBackward10s = viewModel::skipBackward10s,
-                        onPlayNext = viewModel::playNext,
-                        onPlayPrevious = viewModel::playPrevious,
-                        onSetPlaybackSpeed = viewModel::setPlaybackSpeed,
-                        onToggleLoopMode = viewModel::toggleLoopMode,
-                        onSetAbPointA = viewModel::setAbPointA,
-                        onSetAbPointB = viewModel::setAbPointB,
-                        onClearAbLoop = viewModel::clearAbLoop,
-                        onOpenTelemetry = {
-                            viewModel.setExpandedPlayerVisible(false)
-                            viewModel.setTelemetryInspectorVisible(true)
-                        },
-                        onToggleFavorite = {
-                            playerState.currentTrack?.let { viewModel.toggleFavorite(it) }
-                        },
-                        onToggleCache = {
-                            playerState.currentTrack?.let { viewModel.toggleCacheLocally(it) }
+            // Floating Dynamic Toast Banner
+            AnimatedVisibility(
+                visible = toastMessage != null,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp, start = 16.dp, end = 16.dp)
+            ) {
+                toastMessage?.let { msg ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(12.dp, RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(ElectricCyan)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = ElectricCyanDark,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = msg,
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ElectricCyanDark
+                            )
                         }
-                    )
+
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "关闭",
+                            tint = ElectricCyanDark,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { toastMessage = null }
+                        )
+                    }
                 }
+            }
+
+            // S3 Object Key Details Dialog
+            if (isObjectKeyDialogVisible) {
+                AlertDialog(
+                    onDismissRequest = { isObjectKeyDialogVisible = false },
+                    containerColor = SurfaceContainer,
+                    title = {
+                        Text(
+                            text = "S3 对象详细元数据",
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextHighContrast
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "URI: s3://xtrader/podcasts/2025-season/guest_recording_track_02.flac",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = AwsAmber
+                            )
+                            Text(
+                                text = "文件大小: 67,108,864 字节 (64.0 MB)",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = TextLowContrast
+                            )
+                            Text(
+                                text = "存储类型: INTELLIGENT_TIERING",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = TextLowContrast
+                            )
+                            Text(
+                                text = "ETag: \"4d19a008c234a91f421e4d909c29af57\"",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = TextLowContrast
+                            )
+                            Text(
+                                text = "服务端: S3 Lambda Transcoder",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = TextLowContrast
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { isObjectKeyDialogVisible = false }) {
+                            Text("关闭", color = ElectricCyan, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
             }
 
             // Standalone Telemetry Inspector Modal

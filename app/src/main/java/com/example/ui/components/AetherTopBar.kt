@@ -1,9 +1,14 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,253 +21,196 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.ui.theme.AetherSurfaceTier1
 import com.example.ui.theme.AetherVoid
 import com.example.ui.theme.AwsAmber
-import com.example.ui.theme.BorderCyanGlow
-import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.ElectricCyan
-import com.example.ui.theme.StatusGreen
+import com.example.ui.theme.ElectricCyanDim
+import com.example.ui.theme.OutlineVariant
+import com.example.ui.theme.SurfaceContainerHigh
+import com.example.ui.theme.SurfaceContainerLowest
 import com.example.ui.theme.TextHighContrast
 import com.example.ui.theme.TextLowContrast
 import com.example.ui.theme.TextMediumContrast
 
 @Composable
 fun AetherTopBar(
-    currentBucketName: String?,
-    searchQuery: String,
-    onSearchChange: (String) -> Unit,
-    onOpenMountDialog: () -> Unit,
-    onOpenTelemetryInspector: () -> Unit,
-    latencyMs: Int = 28,
-    activeRegion: String = "us-east-1",
+    activeTab: Int,
+    currentUri: String = "s3://xtrader/",
+    onOpenSyncStatus: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var isSearchFocused by remember { mutableStateOf(false) }
+    val tabName = when (activeTab) {
+        0 -> "文件浏览"
+        1 -> "播放列表"
+        2 -> "正在播放"
+        3 -> "同步设置"
+        else -> "文件浏览"
+    }
 
-    Column(
+    val pulseTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by pulseTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(AetherVoid)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .background(SurfaceContainerLowest.copy(alpha = 0.92f))
+            .border(width = 1.dp, color = SurfaceContainerHigh.copy(alpha = 0.4f))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .testTag("aether_header")
     ) {
-        // App Brand Bar with Logo & Telemetry Indicator
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Left: Logo & Title Stack
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f, fill = false)
             ) {
-                // Aether Cube Vector Icon
                 Image(
                     painter = painterResource(id = R.drawable.ic_aether_cube),
-                    contentDescription = "Aether S3 Audio Player",
+                    contentDescription = "Aether S3",
                     modifier = Modifier
-                        .size(34.dp)
+                        .size(36.dp)
                         .clip(RoundedCornerShape(8.dp))
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
-                            text = "AETHER",
+                            text = "Aether S3",
                             fontFamily = FontFamily.SansSerif,
-                            fontSize = 15.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
                             color = TextHighContrast
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "// S3 音频流",
+                            text = "/",
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            fontSize = 13.sp,
+                            color = OutlineVariant
+                        )
+                        Text(
+                            text = tabName,
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = AwsAmber
                         )
                     }
-                    Text(
-                        text = "高精度云端实时流播放器",
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 0.5.sp,
-                        color = TextLowContrast
-                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Pulse Badge
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(SurfaceContainerHigh)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(ElectricCyan)
+                                    .alpha(pulseAlpha)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "实时同步中",
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ElectricCyanDim
+                            )
+                        }
+
+                        Text(
+                            text = currentUri,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = TextLowContrast,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
-            // Right header actions: Telemetry Inspector button & Mount Bucket button
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Live Edge Telemetry Pill
-                AetherStatusChip(
-                    label = "$activeRegion • ${latencyMs}ms",
-                    indicatorColor = StatusGreen,
-                    borderColor = ElectricCyan.copy(alpha = 0.35f),
-                    textColor = ElectricCyan,
-                    modifier = Modifier.clickable(onClick = onOpenTelemetryInspector)
-                )
+            Spacer(modifier = Modifier.width(12.dp))
 
-                Spacer(modifier = Modifier.width(6.dp))
-
-                IconButton(
-                    onClick = onOpenTelemetryInspector,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(AetherSurfaceTier1)
-                        .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-                        .testTag("open_telemetry_btn")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.GraphicEq,
-                        contentDescription = "打开遥测分析仪",
-                        tint = ElectricCyan,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                IconButton(
-                    onClick = onOpenMountDialog,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(AwsAmber)
-                        .testTag("mount_bucket_btn")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "挂载 S3 存储桶",
-                        tint = AetherVoid,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // S3 URI / Prefix Lookup Bar
-        val searchBorder = if (isSearchFocused) BorderCyanGlow else BorderSubtle
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(AetherVoid)
-                .border(1.dp, searchBorder, RoundedCornerShape(8.dp))
-                .padding(horizontal = 10.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
+            // Right: Actions
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Anchored s3:// prefix in JetBrains Mono muted slate
-                Text(
-                    text = "s3://",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ElectricCyan
-                )
-
-                if (currentBucketName != null && currentBucketName != "ALL") {
-                    Text(
-                        text = "$currentBucketName/",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = AwsAmber
+                IconButton(
+                    onClick = onOpenSyncStatus,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SurfaceContainerHigh.copy(alpha = 0.7f))
+                        .testTag("header_sync_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudSync,
+                        contentDescription = "同步状态",
+                        tint = ElectricCyanDim,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 4.dp),
-                    contentAlignment = Alignment.CenterStart
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(AwsAmber),
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (searchQuery.isEmpty()) {
-                        Text(
-                            text = "筛选前缀或音频键名...",
-                            fontFamily = FontFamily.SansSerif,
-                            fontSize = 12.sp,
-                            color = TextLowContrast
-                        )
-                    }
-
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchChange,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged { isSearchFocused = it.isFocused }
-                            .testTag("s3_uri_search_input"),
-                        textStyle = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = TextHighContrast
-                        ),
-                        cursorBrush = SolidColor(ElectricCyan),
-                        singleLine = true
-                    )
-                }
-
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(
-                        onClick = { onSearchChange("") },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "清除搜索",
-                            tint = TextLowContrast,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                } else {
                     Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "搜索",
-                        tint = TextLowContrast,
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "用户中心",
+                        tint = AetherVoid,
                         modifier = Modifier.size(18.dp)
                     )
                 }
