@@ -751,7 +751,7 @@ fun PlaylistScreen(
 
         // 4. Live Queue List
         itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
-            val isCurrent = track.id == playerState.currentTrack?.id
+            val isCurrent = track.key == playerState.currentTrack?.key && track.bucketName == playerState.currentTrack?.bucketName
             val isPlayingThis = isCurrent && (playerState.status == PlaybackStatus.PLAYING ||
                     playerState.status == PlaybackStatus.BUFFERING ||
                     playerState.status == PlaybackStatus.CONNECTING)

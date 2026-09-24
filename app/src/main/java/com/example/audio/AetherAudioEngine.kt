@@ -92,13 +92,13 @@ class AetherAudioEngine(
         queue = tracks
         val current = _playerState.value.currentTrack
         if (current != null) {
-            val idx = queue.indexOfFirst { it.id == current.id }
+            val idx = queue.indexOfFirst { it.key == current.key && it.bucketName == current.bucketName }
             if (idx >= 0) currentIndex = idx
         }
     }
 
     fun addToQueue(track: S3AudioTrack) {
-        if (!queue.any { it.id == track.id }) {
+        if (!queue.any { it.key == track.key && it.bucketName == track.bucketName }) {
             queue = queue + track
         }
         if (_playerState.value.currentTrack == null) {
@@ -107,7 +107,7 @@ class AetherAudioEngine(
     }
 
     fun addAllToQueue(tracks: List<S3AudioTrack>) {
-        val newTracks = tracks.filter { t -> !queue.any { it.id == t.id } }
+        val newTracks = tracks.filter { t -> !queue.any { it.key == t.key && it.bucketName == t.bucketName } }
         queue = queue + newTracks
         if (_playerState.value.currentTrack == null && tracks.isNotEmpty()) {
             playTrack(tracks.first())
@@ -119,12 +119,12 @@ class AetherAudioEngine(
     fun playTrack(track: S3AudioTrack, newQueue: List<S3AudioTrack>? = null) {
         if (newQueue != null && newQueue.isNotEmpty()) {
             queue = newQueue
-            currentIndex = queue.indexOfFirst { it.id == track.id }
+            currentIndex = queue.indexOfFirst { it.key == track.key && it.bucketName == track.bucketName }
         } else {
-            if (queue.isEmpty() || !queue.any { it.id == track.id }) {
+            if (queue.isEmpty() || !queue.any { it.key == track.key && it.bucketName == track.bucketName }) {
                 queue = queue + track
             }
-            currentIndex = queue.indexOfFirst { it.id == track.id }
+            currentIndex = queue.indexOfFirst { it.key == track.key && it.bucketName == track.bucketName }
         }
         if (currentIndex < 0) currentIndex = 0
 
@@ -301,7 +301,7 @@ class AetherAudioEngine(
     fun playNext() {
         if (queue.isEmpty()) return
         val currentTrack = _playerState.value.currentTrack
-        val idx = if (currentTrack != null) queue.indexOfFirst { it.id == currentTrack.id } else currentIndex
+        val idx = if (currentTrack != null) queue.indexOfFirst { it.key == currentTrack.key && it.bucketName == currentTrack.bucketName } else currentIndex
         val nextIdx = if (idx >= 0) (idx + 1) % queue.size else 0
         currentIndex = nextIdx
         playTrack(queue[nextIdx], queue)
@@ -310,7 +310,7 @@ class AetherAudioEngine(
     fun playPrevious() {
         if (queue.isEmpty()) return
         val currentTrack = _playerState.value.currentTrack
-        val idx = if (currentTrack != null) queue.indexOfFirst { it.id == currentTrack.id } else currentIndex
+        val idx = if (currentTrack != null) queue.indexOfFirst { it.key == currentTrack.key && it.bucketName == currentTrack.bucketName } else currentIndex
         val prevIdx = if (idx > 0) idx - 1 else (queue.size - 1)
         currentIndex = prevIdx
         playTrack(queue[prevIdx], queue)
@@ -421,7 +421,7 @@ class AetherAudioEngine(
             }
             LoopMode.OFF -> {
                 val currentTrack = state.currentTrack
-                val idx = if (currentTrack != null) queue.indexOfFirst { it.id == currentTrack.id } else currentIndex
+                val idx = if (currentTrack != null) queue.indexOfFirst { it.key == currentTrack.key && it.bucketName == currentTrack.bucketName } else currentIndex
                 if (queue.isNotEmpty() && idx >= 0 && idx < queue.size - 1) {
                     playNext()
                 } else {

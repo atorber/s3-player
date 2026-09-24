@@ -216,8 +216,9 @@ fun MainScreen(viewModel: AetherViewModel) {
                 }
                 1 -> {
                     // Screen 2: 播放列表 (Playlist)
+                    val activePlaylistPath by viewModel.activePlaylistPath.collectAsStateWithLifecycle()
                     val activeBucket = selectedBucketName?.takeIf { it != "ALL" } ?: syncSettings.currentBucketName
-                    val displayLoc = "s3://$activeBucket/${currentPrefix.removePrefix("/")}"
+                    val displayLoc = "s3://$activeBucket/${activePlaylistPath.removePrefix("/")}"
                     PlaylistScreen(
                         tracks = tracks,
                         playerState = playerState,

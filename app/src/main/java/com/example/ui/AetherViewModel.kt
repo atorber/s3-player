@@ -420,10 +420,20 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         list
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val activePlaylistPath: StateFlow<String> = combine(playerState, _currentPrefix) { state, currPrefix ->
+        val track = state.currentTrack
+        if (track != null) {
+            val key = track.key.removePrefix("/")
+            if (key.contains("/")) key.substringBeforeLast("/") + "/" else ""
+        } else {
+            currPrefix
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
     init {
-        // Keep audio engine queue in sync
+        // Keep audio engine queue in sync with current playlist (filtered tracks)
         viewModelScope.launch {
-            repository.allTracks.collect { tracks ->
+            filteredTracks.collect { tracks ->
                 audioEngine.updateQueue(tracks)
             }
         }
@@ -848,7 +858,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     private suspend fun pollRealS3AndAutoEnqueue() {
         val settings = _syncSettings.value
         val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
-        val cleanTargetPrefix = if (_currentPrefix.value == "/") "" else _currentPrefix.value.removePrefix("/")
+        val cleanTargetPrefix = activePlaylistPath.value.removePrefix("/")
 
         val knownTrackKeys = repository.allTracks.value.map { it.key }.toSet()
 
@@ -883,7 +893,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 _isRealtimeBannerVisible.value = true
 
                 if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
-                    val trackToPlay = newTracks.first()
+                    val trackToPlay = newTracks.last()
                     withContext(Dispatchers.Main) {
                         playTrack(trackToPlay)
                         _toastEvent.emit("检测到新音频，自动播放：${trackToPlay.title}")
@@ -939,7 +949,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                     _isRealtimeBannerVisible.value = true
 
                     if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
-                        val trackToPlay = newTracks.first()
+                        val trackToPlay = newTracks.last()
                         playTrack(trackToPlay)
                         _toastEvent.emit("扫描到新音频，已自动播放：${trackToPlay.title}")
                         return@launch
