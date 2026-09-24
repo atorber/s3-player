@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group>
+        <!-- Isometric Cube: Top Face (AWS Amber bright) -->
+        <path
+            android:fillColor="#FF9900"
+            android:pathData="M54,30 L78,44 L54,58 L30,44 Z" />
+
+        <!-- Isometric Cube: Left Face (Amber shade) -->
+        <path
+            android:fillColor="#D97706"
+            android:pathData="M30,44 L54,58 L54,86 L30,72 Z" />
+
+        <!-- Isometric Cube: Right Face (Amber deep tone) -->
+        <path
+            android:fillColor="#B45309"
+            android:pathData="M54,58 L78,44 L78,72 L54,86 Z" />
+
+        <!-- Crisp interior 1px chamfer rim highlights -->
+        <path
+            android:strokeColor="#33FFFFFF"
+            android:strokeWidth="0.8"
+            android:pathData="M30,44 L54,30 L78,44 M54,58 L54,86" />
+
+        <!-- Cyan Telemetry Waveform Bars (Vertical Audio Rods) -->
+        <!-- Bar 1 (Short left) -->
+        <path
+            android:pathData="M43,38 L43,62"
+            android:strokeColor="#00F2FE"
+            android:strokeWidth="3.6"
+            android:strokeLineCap="round" />
+
+        <!-- Bar 2 (Medium left) -->
+        <path
+            android:pathData="M50,30 L50,70"
+            android:strokeColor="#00F2FE"
+            android:strokeWidth="3.6"
+            android:strokeLineCap="round" />
+
+        <!-- Bar 3 (Peak center-right) -->
+        <path
+            android:pathData="M58,26 L58,74"
+            android:strokeColor="#00F2FE"
+            android:strokeWidth="3.6"
+            android:strokeLineCap="round" />
+
+        <!-- Bar 4 (Medium right) -->
+        <path
+            android:pathData="M65,34 L65,66"
+            android:strokeColor="#00F2FE"
+            android:strokeWidth="3.6"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

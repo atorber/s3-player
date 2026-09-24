@@ -1,0 +1,6 @@
+{
+  "name": "Aether S3 Audio Player",
+  "description": "High-precision S3 audio streaming player and cloud bucket inspector for technical power users.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
