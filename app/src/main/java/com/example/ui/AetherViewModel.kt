@@ -69,7 +69,7 @@ data class SyncSettingsState(
     val endpoint: String = "xtrader.oss.cn-north-3.inspurcloudoss.com",
     val region: String = "cn-north-3",
     val accessKeyId: String = "YjNmNjhkOWMtODE5My00MjM5LTgxZGYtNWQ3MzFlNDA4NTlm",
-    val secretAccessKey: String = "NGE4NjQzZmItNGViNy00NDY0LWFjNjYtYjZiZDA1MTdmOGJj",
+    val secretAccessKey: String = "",
     val sessionToken: String = "",
     val usePathStyle: Boolean = false,
     val isTlsEncrypted: Boolean = true,

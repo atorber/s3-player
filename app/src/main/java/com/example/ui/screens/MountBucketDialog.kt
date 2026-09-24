@@ -81,7 +81,7 @@ fun MountBucketDialog(
     var endpoint by remember { mutableStateOf("xtrader.oss.cn-north-3.inspurcloudoss.com") }
     var region by remember { mutableStateOf("cn-north-3") }
     var accessKey by remember { mutableStateOf("YjNmNjhkOWMtODE5My00MjM5LTgxZGYtNWQ3MzFlNDA4NTlm") }
-    var secretKey by remember { mutableStateOf("NGE4NjQzZmItNGViNy00NDY0LWFjNjYtYjZiZDA1MTdmOGJj") }
+    var secretKey by remember { mutableStateOf("") }
     var showSecretKey by remember { mutableStateOf(false) }
     var usePathStyle by remember { mutableStateOf(false) }
     var useSsl by remember { mutableStateOf(true) }
