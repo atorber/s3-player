@@ -8,6 +8,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -32,10 +35,81 @@ class AetherPlaybackService : Service() {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
 
+    private var mediaSession: MediaSession? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        initMediaSession()
         observeAudioEngine()
+    }
+
+    private fun initMediaSession() {
+        try {
+            mediaSession = MediaSession(this, "AetherPlaybackSession").apply {
+                setCallback(object : MediaSession.Callback() {
+                    override fun onPlay() {
+                        AetherAudioEngine.currentEngine?.togglePlayPause()
+                    }
+
+                    override fun onPause() {
+                        AetherAudioEngine.currentEngine?.togglePlayPause()
+                    }
+
+                    override fun onSkipToNext() {
+                        AetherAudioEngine.currentEngine?.playNext()
+                    }
+
+                    override fun onSkipToPrevious() {
+                        AetherAudioEngine.currentEngine?.playPrevious()
+                    }
+
+                    override fun onStop() {
+                        AetherAudioEngine.currentEngine?.stopPlayback()
+                        stopForegroundService()
+                    }
+
+                    override fun onSeekTo(pos: Long) {
+                        AetherAudioEngine.currentEngine?.seekTo(pos)
+                    }
+                })
+                setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
+                isActive = true
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun updateMediaSession(track: S3AudioTrack?, isPlaying: Boolean, durationMs: Long, positionMs: Long) {
+        val session = mediaSession ?: return
+        try {
+            val playbackState = PlaybackState.Builder()
+                .setActions(
+                    PlaybackState.ACTION_PLAY or
+                    PlaybackState.ACTION_PAUSE or
+                    PlaybackState.ACTION_PLAY_PAUSE or
+                    PlaybackState.ACTION_SKIP_TO_NEXT or
+                    PlaybackState.ACTION_SKIP_TO_PREVIOUS or
+                    PlaybackState.ACTION_STOP or
+                    PlaybackState.ACTION_SEEK_TO
+                )
+                .setState(
+                    if (isPlaying) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
+                    positionMs,
+                    if (isPlaying) 1.0f else 0.0f
+                )
+                .build()
+            session.setPlaybackState(playbackState)
+
+            if (track != null) {
+                val metadata = MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_TITLE, track.title)
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, track.artistOrProject)
+                    .putString(MediaMetadata.METADATA_KEY_ALBUM, track.bucketName)
+                    .putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs)
+                    .build()
+                session.setMetadata(metadata)
+            }
+        } catch (_: Exception) {}
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -52,9 +126,10 @@ class AetherPlaybackService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_START, ACTION_SYNC_STATE -> {
-                // Initial immediate foreground notification to satisfy Android timeout
-                val currentTrack = engine?.playerState?.value?.currentTrack
-                val isPlaying = engine?.playerState?.value?.status == PlaybackStatus.PLAYING
+                val state = engine?.playerState?.value
+                val currentTrack = state?.currentTrack
+                val isPlaying = state?.status == PlaybackStatus.PLAYING
+                updateMediaSession(currentTrack, isPlaying, state?.durationMs ?: 0L, state?.currentPositionMs ?: 0L)
                 val notification = buildNotification(currentTrack, isPlaying)
                 startInForeground(notification)
             }
@@ -65,8 +140,21 @@ class AetherPlaybackService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        val state = AetherAudioEngine.currentEngine?.playerState?.value
+        val isPlaying = state?.status == PlaybackStatus.PLAYING
+        if (!isPlaying) {
+            stopForegroundService()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            mediaSession?.isActive = false
+            mediaSession?.release()
+        } catch (_: Exception) {}
         serviceScope.cancel()
     }
 
@@ -89,15 +177,24 @@ class AetherPlaybackService : Service() {
                         PlaybackStatus.PLAYING,
                         PlaybackStatus.BUFFERING,
                         PlaybackStatus.CONNECTING -> {
+                            updateMediaSession(track, isPlaying = true, durationMs = state.durationMs, positionMs = state.currentPositionMs)
                             val notif = buildNotification(track, isPlaying = true)
                             startInForeground(notif)
                         }
                         PlaybackStatus.PAUSED -> {
+                            updateMediaSession(track, isPlaying = false, durationMs = state.durationMs, positionMs = state.currentPositionMs)
                             val notif = buildNotification(track, isPlaying = false)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                stopForeground(STOP_FOREGROUND_DETACH)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                stopForeground(false)
+                            }
                             notificationManager.notify(NOTIFICATION_ID, notif)
                         }
                         PlaybackStatus.IDLE,
                         PlaybackStatus.ERROR -> {
+                            updateMediaSession(track, isPlaying = false, durationMs = 0L, positionMs = 0L)
                             stopForegroundService()
                         }
                     }

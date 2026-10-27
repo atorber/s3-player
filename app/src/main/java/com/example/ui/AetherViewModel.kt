@@ -95,7 +95,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     private val db = AetherDatabase.getInstance(application)
     private val repository = S3AudioRepository(db.trackDao(), db.bucketDao(), viewModelScope)
     private val preferences = com.example.data.local.AetherPreferences(application)
-    val audioEngine = AetherAudioEngine(application, viewModelScope)
+    val audioEngine = AetherAudioEngine.getInstance(application)
 
     val playerState: StateFlow<PlayerState> = audioEngine.playerState
 
@@ -1407,6 +1407,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         super.onCleared()
-        audioEngine.release()
+        // Do not release audioEngine here so music continues playing in the background
+        // when the user leaves the UI or switches away from the app.
     }
 }

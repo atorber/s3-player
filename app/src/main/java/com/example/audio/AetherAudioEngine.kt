@@ -78,10 +78,13 @@ data class PlayerState(
     val scrubPositionMs: Long = 0L
 )
 
-class AetherAudioEngine(
-    private val context: Context,
-    private val scope: CoroutineScope
+class AetherAudioEngine private constructor(
+    context: Context
 ) {
+    private val context: Context = context.applicationContext
+    private val engineJob = SupervisorJob()
+    private val scope = CoroutineScope(Dispatchers.Main + engineJob)
+
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
@@ -91,10 +94,10 @@ class AetherAudioEngine(
     private var telemetryJob: Job? = null
     private val random = Random()
 
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    private val audioManager = this.context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
 
-    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+    private val powerManager = this.context.getSystemService(Context.POWER_SERVICE) as? PowerManager
     private var wakeLock: PowerManager.WakeLock? = null
 
     init {
@@ -691,16 +694,34 @@ class AetherAudioEngine(
         stopCurrent()
         abandonAudioFocus()
         AetherPlaybackService.stop(context)
+        engineJob.cancel()
+        synchronized(Companion) {
+            if (INSTANCE == this) {
+                INSTANCE = null
+            }
+        }
         if (_engineFlow.value == this) {
             _engineFlow.value = null
         }
     }
 
     companion object {
+        @Volatile
+        private var INSTANCE: AetherAudioEngine? = null
+
+        fun getInstance(context: Context): AetherAudioEngine {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: AetherAudioEngine(context.applicationContext).also {
+                    INSTANCE = it
+                    _engineFlow.value = it
+                }
+            }
+        }
+
         private val _engineFlow = MutableStateFlow<AetherAudioEngine?>(null)
         val engineFlow: StateFlow<AetherAudioEngine?> = _engineFlow.asStateFlow()
 
         val currentEngine: AetherAudioEngine?
-            get() = _engineFlow.value
+            get() = _engineFlow.value ?: INSTANCE
     }
 }
