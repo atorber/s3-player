@@ -158,8 +158,6 @@ class S3RemoteService(
             Result.failure(e)
         }
     }
-        }
-    }
 
     /**
      * Encodes a URI path segment by segment so that '/' is preserved

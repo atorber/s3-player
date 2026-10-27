@@ -177,7 +177,7 @@ class AetherAudioEngine(
         }
     }
 
-    fun getQueue(): List<S3AudioTrack> = queue
+    fun getCurrentQueue(): List<S3AudioTrack> = queue
 
     private fun requestAudioFocus(): Boolean {
         if (audioManager == null) return true
