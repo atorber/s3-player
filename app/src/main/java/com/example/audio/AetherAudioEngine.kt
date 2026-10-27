@@ -15,6 +15,7 @@ import com.example.service.AetherPlaybackService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,7 +84,7 @@ class AetherAudioEngine private constructor(
 ) {
     private val context: Context = context.applicationContext
     private val engineJob = SupervisorJob()
-    private val scope = CoroutineScope(Dispatchers.Main + engineJob)
+    private val scope = CoroutineScope(engineJob + Dispatchers.Main)
 
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()

@@ -19,6 +19,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,29 +34,36 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MotionPhotosAuto
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.QueuePlayNext
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,12 +71,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,9 +89,9 @@ import com.example.ui.theme.AetherSurface
 import com.example.ui.theme.AetherVoid
 import com.example.ui.theme.AwsAmber
 import com.example.ui.theme.BorderCyanGlow
+import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.ElectricCyanDim
-import com.example.ui.theme.OutlineVariant
 import com.example.ui.theme.StatusRed
 import com.example.ui.theme.SurfaceContainer
 import com.example.ui.theme.SurfaceContainerHigh
@@ -106,15 +114,33 @@ fun PlaylistScreen(
     onPlayTrack: (S3AudioTrack) -> Unit,
     onTogglePlayPause: () -> Unit = {},
     onStopPlayback: () -> Unit = {},
+    onSeekTo: (Long) -> Unit = {},
+    onSkipBackward10: () -> Unit = {},
+    onSkipForward30: () -> Unit = {},
+    onPlayNext: () -> Unit = {},
+    onPlayPrevious: () -> Unit = {},
+    onSetPlaybackSpeed: (Float) -> Unit = {},
     onPlayNewArrival: () -> Unit,
     onToggleAutoPlayNew: () -> Unit = {},
     onToggleRepeat: () -> Unit,
     onClearPlayed: () -> Unit,
+    onClearAll: () -> Unit = {},
+    onRemoveTrack: (S3AudioTrack) -> Unit = {},
+    onEnqueueNext: (S3AudioTrack) -> Unit = {},
+    onOpenTelemetry: () -> Unit = {},
+    onNavigateToBrowser: () -> Unit = {},
     onShuffle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val currentTrack = playerState.currentTrack ?: tracks.firstOrNull()
-    var isAutoEnqueueOn by remember { mutableStateOf(true) }
+    val currentIndex = remember(tracks, playerState.currentTrack) {
+        val active = playerState.currentTrack
+        if (active == null) -1
+        else tracks.indexOfFirst { it.key == active.key && it.bucketName == active.bucketName }
+    }
+
+    var isUserScrubbing by remember { mutableStateOf(false) }
+    var scrubFraction by remember { mutableFloatStateOf(0f) }
 
     val pulseTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by pulseTransition.animateFloat(
@@ -127,135 +153,117 @@ fun PlaylistScreen(
         label = "pulseAlpha"
     )
 
+    val speedOptions = listOf(1.0f, 1.25f, 1.5f, 2.0f)
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(AetherSurface)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .background(AetherVoid)
+            .padding(horizontal = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp)
     ) {
-        item {
-            Spacer(modifier = Modifier.height(2.dp))
-            // 1. Real-time Stream Notification Banner (Dismissible Toast)
-            AnimatedVisibility(
-                visible = isBannerVisible,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut() + slideOutVertically()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceContainerHigh)
-                        .border(1.dp, BorderCyanGlow, RoundedCornerShape(12.dp))
-                        .padding(14.dp)
-                        .testTag("realtime_stream_banner")
+        // 1. 实时新增 S3 音频到达横幅 (Real-time Stream Notification Banner)
+        if (isBannerVisible) {
+            item {
+                AnimatedVisibility(
+                    visible = isBannerVisible,
+                    enter = fadeIn() + slideInVertically(),
+                    exit = fadeOut() + slideOutVertically()
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SurfaceContainerHigh)
+                            .border(1.dp, BorderCyanGlow, RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                            .testTag("realtime_stream_banner")
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(ElectricCyan)
+                                            .alpha(pulseAlpha)
+                                    )
+                                    Text(
+                                        text = "检测到新增 S3 音频 · ${bannerTrack?.lastModified ?: "刚刚"}",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ElectricCyan
+                                    )
+                                }
+                                Text(
+                                    text = bannerTrack?.title ?: "新增音频对象",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextHighContrast,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${bannerTrack?.format ?: "FLAC"} · ${bannerTrack?.sizeFormatted ?: "--"}",
+                                    fontSize = 10.sp,
+                                    color = TextLowContrast
+                                )
+                            }
+
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(ElectricCyan)
-                                        .alpha(pulseAlpha)
-                                )
-                                Text(
-                                    text = "检测到新增 S3 音频文件",
-                                    fontFamily = FontFamily.SansSerif,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ElectricCyanDim
-                                )
-                            }
-
-                            Text(
-                                text = bannerTrack?.lastModified ?: "刚刚",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                color = TextLowContrast
-                            )
-                        }
-
-                        Column(modifier = Modifier.padding(start = 14.dp)) {
-                            Text(
-                                text = bannerTrack?.title ?: "新增音频对象",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextHighContrast
-                            )
-                            Text(
-                                text = "格式 ${bannerTrack?.format ?: "FLAC"} · 体积 ${bannerTrack?.sizeFormatted ?: "--"} · 存储类型 ${bannerTrack?.storageClass ?: "STANDARD"}",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 11.sp,
-                                color = TextLowContrast
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(SurfaceContainerHighest)
-                                    .clickable { onDismissBanner() }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    .testTag("banner_dismiss_btn")
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "忽略",
-                                        tint = TextMediumContrast,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(SurfaceContainerHighest)
+                                        .clickable { onDismissBanner() }
+                                        .padding(horizontal = 9.dp, vertical = 6.dp)
+                                        .testTag("banner_dismiss_btn")
+                                ) {
                                     Text(
                                         text = "忽略",
-                                        fontFamily = FontFamily.SansSerif,
                                         fontSize = 11.sp,
                                         color = TextMediumContrast
                                     )
                                 }
-                            }
 
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(ElectricCyan)
-                                    .clickable { onPlayNewArrival() }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    .testTag("banner_play_btn")
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "立即播放",
-                                        tint = AetherVoid,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "立即播放",
-                                        fontFamily = FontFamily.SansSerif,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AetherVoid
-                                    )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(ElectricCyan)
+                                        .clickable { onPlayNewArrival() }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        .testTag("banner_play_btn")
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "立即播放",
+                                            tint = AetherVoid,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text(
+                                            text = "立即播放",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = AetherVoid
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -264,9 +272,19 @@ fun PlaylistScreen(
             }
         }
 
+        // 2. 主控播放器中枢卡片 (Master Player Console Hero Card)
         item {
-            // 2. Currently Playing Hero Card in Playlist
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(AetherSurface)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(14.dp))
+                    .padding(14.dp)
+                    .testTag("playlist_hero_card"),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Top Telemetry & Utility Row (状态指示 + 延迟/吞吐量 + 倍速切换 + EQ遥测)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -274,827 +292,940 @@ fun PlaylistScreen(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
+                        val isStreaming = playerState.status == PlaybackStatus.PLAYING ||
+                                playerState.status == PlaybackStatus.BUFFERING
                         Icon(
                             imageVector = Icons.Default.Sensors,
                             contentDescription = null,
-                            tint = AwsAmber,
-                            modifier = Modifier.size(15.dp)
+                            tint = if (isStreaming) ElectricCyan else AwsAmber,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .alpha(if (isStreaming) pulseAlpha else 1f)
                         )
                         Text(
-                            text = if (playerState.status == PlaybackStatus.PLAYING) "正在从 S3 节点实时推流" else "S3 音频流就绪",
-                            fontFamily = FontFamily.SansSerif,
+                            text = when (playerState.status) {
+                                PlaybackStatus.PLAYING -> "正在推流"
+                                PlaybackStatus.BUFFERING, PlaybackStatus.CONNECTING -> "正在缓冲..."
+                                PlaybackStatus.PAUSED -> "已暂停"
+                                PlaybackStatus.ERROR -> "流异常"
+                                PlaybackStatus.IDLE -> "就绪待命"
+                            },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = AwsAmber
+                            color = if (isStreaming) ElectricCyan else AwsAmber
+                        )
+                        Text(
+                            text = "· ${playerState.telemetry.latencyMs}ms · ${
+                                String.format(
+                                    java.util.Locale.US,
+                                    "%.1f",
+                                    playerState.telemetry.throughputMBs
+                                )
+                            } MB/s",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = TextLowContrast
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(SurfaceContainerHigh)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    // 右侧：倍速切换胶丸 + 音频遥测/EQ 按钮
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "延迟 ${playerState.telemetry.latencyMs}ms",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = ElectricCyanDim
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (playerState.playbackSpeed != 1.0f) AwsAmber.copy(alpha = 0.2f)
+                                    else SurfaceContainerHigh
+                                )
+                                .border(
+                                    1.dp,
+                                    if (playerState.playbackSpeed != 1.0f) AwsAmber.copy(alpha = 0.6f) else Color.Transparent,
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .clickable {
+                                    val nextIdx = (speedOptions.indexOf(playerState.playbackSpeed) + 1) % speedOptions.size
+                                    onSetPlaybackSpeed(speedOptions[nextIdx])
+                                }
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .testTag("hero_btn_speed")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Speed,
+                                    contentDescription = "倍速",
+                                    tint = if (playerState.playbackSpeed != 1.0f) AwsAmber else TextMediumContrast,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "${playerState.playbackSpeed}x",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (playerState.playbackSpeed != 1.0f) AwsAmber else TextHighContrast
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(SurfaceContainerHigh)
+                                .clickable { onOpenTelemetry() }
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .testTag("hero_btn_telemetry")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Equalizer,
+                                    contentDescription = "音效与遥测",
+                                    tint = ElectricCyan,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "EQ/遥测",
+                                    fontSize = 10.sp,
+                                    color = ElectricCyanDim,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceContainerLow)
-                        .border(1.dp, SurfaceContainerHigh, RoundedCornerShape(12.dp))
-                        .padding(14.dp)
-                        .testTag("playlist_hero_card")
+                // Track Artwork & Metadata Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Top row: artwork + meta + volume
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(SurfaceContainerHigh),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_aether_cube),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(42.dp)
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(AwsAmber.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.GraphicEq,
-                                        contentDescription = null,
-                                        tint = AwsAmber,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            val folderDisplay = currentTrack?.key?.trim()?.removePrefix("/")?.let { k ->
-                                if (k.contains("/")) "📁 " + k.substringBeforeLast("/") + "/" else "📁 根目录"
-                            } ?: "📁 根目录"
-
-                            Column {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(SurfaceContainerHighest)
-                                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                                    ) {
-                                        Text(
-                                            text = currentTrack?.format ?: "FLAC",
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = AwsAmber
-                                        )
-                                    }
-                                    Text(
-                                        text = folderDisplay,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
-                                        color = TextLowContrast,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(2.dp))
-
-                                Text(
-                                    text = currentTrack?.title ?: "暂无可播放曲目",
-                                    fontFamily = FontFamily.SansSerif,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextHighContrast,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-
-                                Text(
-                                    text = "${currentTrack?.sampleRate ?: "48kHz / 24-bit"} · ${currentTrack?.channels ?: "2.0 Stereo"}",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 10.sp,
-                                    color = ElectricCyanDim
-                                )
-                            }
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            IconButton(
-                                onClick = onStopPlayback,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(SurfaceContainerHigh)
-                                    .testTag("hero_btn_stop")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Stop,
-                                    contentDescription = "停止播放",
-                                    tint = if (playerState.status == PlaybackStatus.PLAYING) StatusRed else TextMediumContrast,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
-
-                            IconButton(
-                                onClick = onTogglePlayPause,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(if (playerState.status == PlaybackStatus.PLAYING) AwsAmber else ElectricCyan)
-                                    .testTag("hero_btn_play_pause")
-                            ) {
-                                Icon(
-                                    imageVector = if (playerState.status == PlaybackStatus.PLAYING) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (playerState.status == PlaybackStatus.PLAYING) "暂停" else "播放",
-                                    tint = AetherVoid,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val currentPos = playerState.currentPositionMs
-                    val duration = if (playerState.durationMs > 0) playerState.durationMs else (currentTrack?.durationMs ?: 0L)
-                    val progressRatio = if (duration > 0) (currentPos.toFloat() / duration).coerceIn(0f, 1f) else 0f
-
-                    // Waveform Snippet + dynamic timestamps
-                    Column(
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(SurfaceContainerLowest.copy(alpha = 0.85f))
-                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                            .size(50.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(SurfaceContainerHigh),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_aether_cube),
+                            contentDescription = null,
+                            modifier = Modifier.size(38.dp)
+                        )
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(26.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Bottom
+                                .fillMaxSize()
+                                .background(
+                                    if (playerState.status == PlaybackStatus.PLAYING) ElectricCyan.copy(alpha = 0.15f)
+                                    else AwsAmber.copy(alpha = 0.12f)
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            val barHeights = listOf(
-                                8.dp, 14.dp, 22.dp, 12.dp, 24.dp, 18.dp, 26.dp, 20.dp,
-                                10.dp, 16.dp, 22.dp, 12.dp, 26.dp, 16.dp, 20.dp, 14.dp,
-                                18.dp, 10.dp, 22.dp, 16.dp, 8.dp, 18.dp, 12.dp
-                            )
-                            val playedBarCount = (progressRatio * barHeights.size).toInt()
-                            barHeights.forEachIndexed { idx, h ->
-                                val isPlayed = idx <= playedBarCount
-                                Box(
-                                    modifier = Modifier
-                                        .width(3.dp)
-                                        .height(h)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(if (isPlayed) (if (idx == playedBarCount) AwsAmber else ElectricCyan) else SurfaceContainerHighest)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = formatPlaylistMs(currentPos),
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AwsAmber
-                            )
-                            Text(
-                                text = formatPlaylistMs(duration),
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                color = TextLowContrast
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = if (playerState.status == PlaybackStatus.PLAYING) ElectricCyan else AwsAmber,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                    // Dynamic S3 Buffer and latency
-                    val bufferPct = playerState.bufferPercentage.coerceIn(0, 100)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    val folderDisplay = currentTrack?.key?.trim()?.removePrefix("/")?.let { k ->
+                        if (k.contains("/")) "📁 " + k.substringBeforeLast("/") + "/" else "📁 根目录 /"
+                    } ?: "📁 暂未选择目录"
+
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(
-                                text = "S3 缓冲区:",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 10.sp,
-                                color = TextLowContrast
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .width(60.dp)
-                                    .height(5.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(SurfaceContainerHighest)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(bufferPct / 100f)
-                                        .height(5.dp)
-                                        .background(ElectricCyan)
-                                )
-                            }
-                            Text(
-                                text = "$bufferPct%",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                color = ElectricCyanDim
-                            )
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "吞吐量:",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 10.sp,
-                                color = TextLowContrast
-                            )
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(SurfaceContainerHigh)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .background(SurfaceContainerHighest)
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
                             ) {
                                 Text(
-                                    text = String.format(java.util.Locale.US, "%.1f MB/s", playerState.telemetry.throughputMBs),
+                                    text = currentTrack?.format ?: "S3 STREAM",
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 10.sp,
+                                    fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AwsAmber
                                 )
                             }
+                            Text(
+                                text = folderDisplay,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                color = TextLowContrast,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = currentTrack?.title ?: "队列暂无播放曲目",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextHighContrast,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        val bufferPct = playerState.bufferPercentage.coerceIn(0, 100)
+                        Text(
+                            text = if (currentTrack != null) {
+                                "${currentTrack.sampleRate} · ${currentTrack.sizeFormatted} · 缓冲 $bufferPct%"
+                            } else {
+                                "在「文件浏览」中点击任意目录或单曲即可开始流式播放"
+                            },
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = ElectricCyanDim,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-            }
-        }
 
-        item {
-            // 3. Playlist Header & Quick Controls
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Interactive Seek Slider & Timestamps
+                val duration = if (playerState.durationMs > 0) playerState.durationMs else (currentTrack?.durationMs ?: 0L)
+                val currentPos = playerState.currentPositionMs.coerceAtMost(duration.coerceAtLeast(1L))
+                val actualFraction = if (duration > 0) (currentPos.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                val sliderValue = if (isUserScrubbing) scrubFraction else actualFraction
+                val displayPositionMs = if (isUserScrubbing) (scrubFraction * duration).toLong() else currentPos
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SurfaceContainerLowest.copy(alpha = 0.85f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Slider(
+                        value = sliderValue,
+                        onValueChange = { frac ->
+                            isUserScrubbing = true
+                            scrubFraction = frac
+                        },
+                        onValueChangeFinished = {
+                            if (duration > 0) {
+                                onSeekTo((scrubFraction * duration).toLong())
+                            }
+                            isUserScrubbing = false
+                        },
+                        enabled = currentTrack != null && duration > 0,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(26.dp)
+                            .testTag("hero_seek_slider"),
+                        colors = SliderDefaults.colors(
+                            thumbColor = ElectricCyan,
+                            activeTrackColor = ElectricCyan,
+                            inactiveTrackColor = SurfaceContainerHighest,
+                            disabledThumbColor = TextLowContrast,
+                            disabledActiveTrackColor = TextLowContrast
+                        )
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = formatPlaylistMs(displayPositionMs),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isUserScrubbing) AwsAmber else ElectricCyan
+                        )
+                        if (currentIndex >= 0 && tracks.isNotEmpty()) {
+                            Text(
+                                text = "第 ${currentIndex + 1} / ${tracks.size} 首",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                color = TextLowContrast
+                            )
+                        }
+                        Text(
+                            text = formatPlaylistMs(duration),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = TextLowContrast
+                        )
+                    }
+                }
+
+                // Complete Master Transport Control Bar (循环 / 上一首 / 快退10s / 播放暂停 / 快进30s / 下一首 / 停止)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "实时动态播放队列",
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextHighContrast
-                    )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(SurfaceContainerHighest)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "${tracks.size} 首曲目",
-                            fontFamily = FontFamily.SansSerif,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ElectricCyanDim
-                        )
-                    }
-                }
-
-                Text(
-                    text = "正在监听 $monitoredLocation",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = TextLowContrast
-                )
-
-                // Quick Controls Carousel
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 1. 自动播放开关 (替换原随机播放)
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isAutoPlayNewEnabled) ElectricCyan.copy(alpha = 0.18f) else SurfaceContainer)
-                            .border(
-                                1.dp,
-                                if (isAutoPlayNewEnabled) ElectricCyan.copy(alpha = 0.6f) else Color.Transparent,
-                                RoundedCornerShape(8.dp)
-                            )
-                            .clickable { onToggleAutoPlayNew() }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                            .testTag("playlist_toggle_autoplay_btn")
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (isAutoPlayNewEnabled) Icons.Default.MotionPhotosAuto else Icons.Default.PlayCircle,
-                                contentDescription = "自动播放",
-                                tint = if (isAutoPlayNewEnabled) ElectricCyan else TextMediumContrast,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (isAutoPlayNewEnabled) "自动播放 [开]" else "自动播放 [关]",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 11.sp,
-                                fontWeight = if (isAutoPlayNewEnabled) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isAutoPlayNewEnabled) ElectricCyan else TextHighContrast
-                            )
-                        }
-                    }
-
-                    // 2. 循环播放模式切换 (已生效：列表循环 / 单曲循环 / 顺序播放)
-                    val loopText = when (playerState.loopMode) {
-                        LoopMode.ALL -> "列表循环"
-                        LoopMode.SINGLE -> "单曲循环"
-                        LoopMode.OFF -> "顺序播放"
-                        LoopMode.AB_REPEAT -> "区间循环"
-                    }
+                    // 1. 循环模式按钮
                     val loopIcon = when (playerState.loopMode) {
                         LoopMode.SINGLE -> Icons.Default.RepeatOne
                         else -> Icons.Default.Repeat
                     }
-                    val isLoopActive = playerState.loopMode != LoopMode.OFF
-                    val loopColor = if (playerState.loopMode == LoopMode.SINGLE) ElectricCyan else AwsAmber
-
+                    val loopLabel = when (playerState.loopMode) {
+                        LoopMode.ALL -> "列表循环"
+                        LoopMode.SINGLE -> "单曲循环"
+                        LoopMode.OFF -> "顺序播放"
+                        LoopMode.AB_REPEAT -> "AB循环"
+                    }
+                    val isLoopOn = playerState.loopMode != LoopMode.OFF
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isLoopActive) loopColor.copy(alpha = 0.18f) else SurfaceContainer)
-                            .border(
-                                1.dp,
-                                if (isLoopActive) loopColor.copy(alpha = 0.6f) else Color.Transparent,
-                                RoundedCornerShape(8.dp)
+                            .background(
+                                if (isLoopOn) AwsAmber.copy(alpha = 0.16f)
+                                else SurfaceContainerHigh
                             )
                             .clickable { onToggleRepeat() }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
                             .testTag("playlist_toggle_loop_btn")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = loopIcon,
-                                contentDescription = loopText,
-                                tint = if (isLoopActive) loopColor else TextMediumContrast,
+                                contentDescription = loopLabel,
+                                tint = if (isLoopOn) AwsAmber else TextMediumContrast,
                                 modifier = Modifier.size(15.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = loopText,
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 11.sp,
-                                fontWeight = if (isLoopActive) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isLoopActive) loopColor else TextHighContrast
+                                text = loopLabel,
+                                fontSize = 10.sp,
+                                fontWeight = if (isLoopOn) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isLoopOn) AwsAmber else TextMediumContrast
                             )
                         }
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(SurfaceContainer)
-                            .clickable { onClearPlayed() }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    // 2. 核心播放控制按钮组
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CleaningServices, null, tint = TextMediumContrast, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("清除已播", fontFamily = FontFamily.SansSerif, fontSize = 11.sp, color = TextHighContrast)
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isAutoEnqueueOn) AwsAmber else SurfaceContainer)
-                            .clickable { isAutoEnqueueOn = !isAutoEnqueueOn }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = onPlayPrevious,
+                            enabled = tracks.isNotEmpty(),
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceContainerHigh)
+                                .testTag("hero_btn_prev")
+                        ) {
                             Icon(
-                                Icons.Default.CloudSync,
-                                null,
-                                tint = if (isAutoEnqueueOn) AetherVoid else TextMediumContrast,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                if (isAutoEnqueueOn) "自动入队 [开]" else "自动入队 [关]",
-                                fontFamily = FontFamily.SansSerif,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isAutoEnqueueOn) AetherVoid else TextHighContrast
+                                imageVector = Icons.Default.SkipPrevious,
+                                contentDescription = "上一首",
+                                tint = TextHighContrast,
+                                modifier = Modifier.size(19.dp)
                             )
                         }
+
+                        IconButton(
+                            onClick = onSkipBackward10,
+                            enabled = currentTrack != null,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceContainerHigh)
+                                .testTag("hero_btn_replay10")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Replay10,
+                                contentDescription = "快退10秒",
+                                tint = TextHighContrast,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        val isPlaying = playerState.status == PlaybackStatus.PLAYING ||
+                                playerState.status == PlaybackStatus.BUFFERING
+                        IconButton(
+                            onClick = onTogglePlayPause,
+                            enabled = currentTrack != null || tracks.isNotEmpty(),
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(if (isPlaying) AwsAmber else ElectricCyan)
+                                .testTag("hero_btn_play_pause")
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "暂停" else "播放",
+                                tint = AetherVoid,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onSkipForward30,
+                            enabled = currentTrack != null,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceContainerHigh)
+                                .testTag("hero_btn_forward30")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Forward30,
+                                contentDescription = "快进30秒",
+                                tint = TextHighContrast,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onPlayNext,
+                            enabled = tracks.isNotEmpty(),
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceContainerHigh)
+                                .testTag("hero_btn_next")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SkipNext,
+                                contentDescription = "下一首",
+                                tint = TextHighContrast,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                    }
+
+                    // 3. 停止按钮
+                    IconButton(
+                        onClick = onStopPlayback,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerHigh)
+                            .testTag("hero_btn_stop")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = "停止播放",
+                            tint = if (playerState.status == PlaybackStatus.PLAYING) StatusRed else TextMediumContrast,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }
         }
 
+        // 3. 播放队列标题栏与真实快捷工具栏 (Queue Header & Action Bar)
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "接下来播放 · 智能排序",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = TextLowContrast
-                )
-                Text(
-                    text = "长按拖动排序",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = TextLowContrast
-                )
-            }
-        }
-
-        // 4. Live Queue List
-        itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
-            val isCurrent = track.key == playerState.currentTrack?.key && track.bucketName == playerState.currentTrack?.bucketName
-            val isPlayingThis = isCurrent && (playerState.status == PlaybackStatus.PLAYING ||
-                    playerState.status == PlaybackStatus.BUFFERING ||
-                    playerState.status == PlaybackStatus.CONNECTING)
-            val isPausedThis = isCurrent && playerState.status == PlaybackStatus.PAUSED
-            val isFresh = track.id == 2L
-            val isNewJoin = track.id == 3L
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        when {
-                            isPlayingThis -> ElectricCyan.copy(alpha = 0.08f)
-                            isPausedThis -> AwsAmber.copy(alpha = 0.08f)
-                            else -> SurfaceContainerLow
-                        }
-                    )
-                    .border(
-                        1.dp,
-                        when {
-                            isPlayingThis -> ElectricCyan.copy(alpha = 0.45f)
-                            isPausedThis -> AwsAmber.copy(alpha = 0.45f)
-                            else -> Color.Transparent
-                        },
-                        RoundedCornerShape(10.dp)
-                    )
-                    .clickable {
-                        if (isPlayingThis || isPausedThis) {
-                            onTogglePlayPause()
-                        } else {
-                            onPlayTrack(track)
-                        }
-                    }
-                    .padding(10.dp)
-                    .testTag("queue_item_${track.id}"),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DragIndicator,
-                        contentDescription = "排序",
-                        tint = TextLowContrast,
-                        modifier = Modifier.size(20.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(SurfaceContainerHigh),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = track.format,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isPlayingThis) ElectricCyan else if (isFresh) ElectricCyanDim else AwsAmber
-                            )
-                            Text(
-                                text = if (track.format == "FLAC") "96k" else "48k",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.sp,
-                                color = TextLowContrast
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
                     Column {
-                        Text(
-                            text = track.title,
-                            fontFamily = FontFamily.SansSerif,
-                            fontSize = 12.sp,
-                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                            color = if (isPlayingThis) ElectricCyan else if (isPausedThis) AwsAmber else TextHighContrast,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            if (isPlayingThis) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(ElectricCyan.copy(alpha = 0.2f))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.GraphicEq,
-                                            contentDescription = null,
-                                            tint = ElectricCyan,
-                                            modifier = Modifier.size(10.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text(
-                                            text = "正在播放",
-                                            fontFamily = FontFamily.SansSerif,
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = ElectricCyanDim
-                                        )
-                                    }
-                                }
-                            } else if (isPausedThis) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(AwsAmber.copy(alpha = 0.2f))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
-                                    Text(
-                                        text = "已暂停",
-                                        fontFamily = FontFamily.SansSerif,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AwsAmber
+                            Text(
+                                text = "播放队列 (${tracks.size})",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextHighContrast
+                            )
+                            if (currentIndex > 0) {
+                                Text(
+                                    text = "· 已播 $currentIndex 首",
+                                    fontSize = 11.sp,
+                                    color = TextLowContrast
+                                )
+                            }
+                        }
+                        Text(
+                            text = "监听路径: $monitoredLocation",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = TextLowContrast,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // 右侧：队列真实操作按钮组 (新文件自动播 / 清理已播 / 清空全部)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 1. 新增音频自动播放开关
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(
+                                    if (isAutoPlayNewEnabled) ElectricCyan.copy(alpha = 0.16f)
+                                    else SurfaceContainer
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isAutoPlayNewEnabled) ElectricCyan.copy(alpha = 0.5f) else BorderSubtle,
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .clickable { onToggleAutoPlayNew() }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .testTag("playlist_toggle_autoplay_btn")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isAutoPlayNewEnabled) Icons.Default.MotionPhotosAuto else Icons.Default.PlayCircle,
+                                    contentDescription = "新音频自动播放",
+                                    tint = if (isAutoPlayNewEnabled) ElectricCyan else TextMediumContrast,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (isAutoPlayNewEnabled) "新曲自动播" else "手动触发",
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isAutoPlayNewEnabled) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isAutoPlayNewEnabled) ElectricCyan else TextMediumContrast
+                                )
+                            }
+                        }
+
+                        // 2. 清理已播曲目
+                        if (tracks.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(SurfaceContainer)
+                                    .border(1.dp, BorderSubtle, RoundedCornerShape(7.dp))
+                                    .clickable { onClearPlayed() }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                                    .testTag("playlist_clear_played_btn")
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CleaningServices,
+                                        contentDescription = "清理已播",
+                                        tint = TextMediumContrast,
+                                        modifier = Modifier.size(13.dp)
                                     )
-                                }
-                            } else if (isFresh) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(ElectricCyan.copy(alpha = 0.2f))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
+                                    Spacer(modifier = Modifier.width(3.dp))
                                     Text(
-                                        text = "实时新增 (PutObject)",
-                                        fontFamily = FontFamily.SansSerif,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ElectricCyanDim
-                                    )
-                                }
-                            } else if (isNewJoin) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(SurfaceContainerHighest)
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
-                                    Text(
-                                        text = "最新 · 自动入队",
-                                        fontFamily = FontFamily.SansSerif,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AwsAmber
-                                    )
-                                }
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(SurfaceContainer)
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
-                                    Text(
-                                        text = "就绪",
-                                        fontFamily = FontFamily.SansSerif,
-                                        fontSize = 8.sp,
-                                        color = TextLowContrast
+                                        text = "清理已播",
+                                        fontSize = 10.sp,
+                                        color = TextHighContrast
                                     )
                                 }
                             }
 
-                            Text(
-                                text = "${track.sizeFormatted} • ${track.durationFormatted}",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                color = TextLowContrast
-                            )
-                        }
-                    }
-                }
-
-                // 正在播放的音频在列表中的操作按钮显示为暂停、停止；未播放音频显示播放
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (isPlayingThis) {
-                        // 1. 停止按钮 (Stop)
-                        IconButton(
-                            onClick = { onStopPlayback() },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceContainerHighest)
-                                .testTag("btn_stop_${track.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Stop,
-                                contentDescription = "停止",
-                                tint = StatusRed,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-
-                        // 2. 暂停按钮 (Pause)
-                        IconButton(
-                            onClick = { onTogglePlayPause() },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(AwsAmber)
-                                .testTag("btn_pause_${track.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Pause,
-                                contentDescription = "暂停",
-                                tint = AetherVoid,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    } else if (isPausedThis) {
-                        // 1. 停止按钮 (Stop)
-                        IconButton(
-                            onClick = { onStopPlayback() },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceContainerHighest)
-                                .testTag("btn_stop_${track.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Stop,
-                                contentDescription = "停止",
-                                tint = TextMediumContrast,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-
-                        // 2. 继续播放按钮 (Resume Play)
-                        IconButton(
-                            onClick = { onTogglePlayPause() },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(ElectricCyan)
-                                .testTag("btn_resume_${track.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "继续播放",
-                                tint = AetherVoid,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    } else {
-                        // 普通播放按钮 (Play)
-                        IconButton(
-                            onClick = { onPlayTrack(track) },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceContainerHighest)
-                                .testTag("btn_play_${track.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "播放",
-                                tint = if (isFresh) ElectricCyan else TextHighContrast,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            // 3. 清空全部队列
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(SurfaceContainer)
+                                    .border(1.dp, BorderSubtle, RoundedCornerShape(7.dp))
+                                    .clickable { onClearAll() }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                                    .testTag("playlist_clear_all_btn")
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeleteSweep,
+                                        contentDescription = "清空队列",
+                                        tint = StatusRed.copy(alpha = 0.85f),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(
+                                        text = "清空",
+                                        fontSize = 10.sp,
+                                        color = TextMediumContrast
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        item {
-            // 5. Queue Policy Footer info
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(SurfaceContainerLowest)
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Box(
+        // 4. 播放队列曲目列表或空队列引导卡片
+        if (tracks.isEmpty()) {
+            item {
+                Column(
                     modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(SurfaceContainerHigh),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AetherSurface)
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                        .padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CloudSync,
+                        imageVector = Icons.Default.FolderOpen,
                         contentDescription = null,
-                        tint = ElectricCyanDim,
-                        modifier = Modifier.size(18.dp)
+                        tint = TextLowContrast,
+                        modifier = Modifier.size(36.dp)
                     )
-                }
-
-                Column {
                     Text(
-                        text = "当前实时监听与入队策略",
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextHighContrast
+                        text = "当前播放队列为空",
+                        color = TextHighContrast,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "当检测到当前子目录有新音频上传时，立即插入下一首并预缓存音频头信息。基于 HTTP Range 请求实现零转码损耗即时流式播放。",
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 10.sp,
+                        text = "您可以前往「文件浏览」直接点击目录播放，或将喜欢的子目录与单曲加入队列",
                         color = TextLowContrast,
-                        lineHeight = 14.sp
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center
                     )
+                    Button(
+                        onClick = onNavigateToBrowser,
+                        colors = ButtonDefaults.buttonColors(containerColor = ElectricCyan),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "前往文件浏览添加音频",
+                            color = Color.Black,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
-        }
+        } else {
+            itemsIndexed(tracks, key = { index, t -> "${t.id}_$index" }) { index, track ->
+                val isCurrent = index == currentIndex
+                val isPlayingThis = isCurrent && (
+                        playerState.status == PlaybackStatus.PLAYING ||
+                                playerState.status == PlaybackStatus.BUFFERING ||
+                                playerState.status == PlaybackStatus.CONNECTING
+                        )
+                val isPausedThis = isCurrent && playerState.status == PlaybackStatus.PAUSED
+                val isPlayed = currentIndex > 0 && index < currentIndex
+                val isNextUp = currentIndex >= 0 && index == currentIndex + 1
 
-        item {
-            Spacer(modifier = Modifier.height(80.dp)) // clearance for dock & nav
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .alpha(if (isPlayed) 0.62f else 1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            when {
+                                isPlayingThis -> ElectricCyan.copy(alpha = 0.09f)
+                                isPausedThis -> AwsAmber.copy(alpha = 0.08f)
+                                else -> AetherSurface
+                            }
+                        )
+                        .border(
+                            1.dp,
+                            when {
+                                isPlayingThis -> ElectricCyan.copy(alpha = 0.45f)
+                                isPausedThis -> AwsAmber.copy(alpha = 0.45f)
+                                else -> BorderSubtle
+                            },
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable {
+                            if (isPlayingThis || isPausedThis) {
+                                onTogglePlayPause()
+                            } else {
+                                onPlayTrack(track)
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                        .testTag("queue_item_${track.id}"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 左侧：序号或播放状态指示器 + 曲目元数据
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    when {
+                                        isPlayingThis -> ElectricCyan
+                                        isPausedThis -> AwsAmber
+                                        else -> SurfaceContainerHigh
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            when {
+                                isPlayingThis -> {
+                                    Icon(
+                                        imageVector = Icons.Default.GraphicEq,
+                                        contentDescription = "正在播放",
+                                        tint = AetherVoid,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                                isPausedThis -> {
+                                    Icon(
+                                        imageVector = Icons.Default.Pause,
+                                        contentDescription = "已暂停",
+                                        tint = AetherVoid,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                                else -> {
+                                    Text(
+                                        text = String.format(java.util.Locale.US, "%02d", index + 1),
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isNextUp) ElectricCyan else TextMediumContrast
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = track.title,
+                                fontSize = 13.sp,
+                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                                color = when {
+                                    isPlayingThis -> ElectricCyan
+                                    isPausedThis -> AwsAmber
+                                    else -> TextHighContrast
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                // 格式徽标
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(SurfaceContainerHigh)
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = track.format.uppercase(),
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AwsAmber
+                                    )
+                                }
+
+                                // 真实队列位置状态标签
+                                when {
+                                    isPlayingThis -> {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(ElectricCyan.copy(alpha = 0.18f))
+                                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = "正在播放",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ElectricCyan
+                                            )
+                                        }
+                                    }
+                                    isPausedThis -> {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(AwsAmber.copy(alpha = 0.18f))
+                                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = "已暂停",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = AwsAmber
+                                            )
+                                        }
+                                    }
+                                    isNextUp -> {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(ElectricCyan.copy(alpha = 0.14f))
+                                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = "下一首",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ElectricCyanDim
+                                            )
+                                        }
+                                    }
+                                    isPlayed -> {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(SurfaceContainer)
+                                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = "已播",
+                                                fontSize = 9.sp,
+                                                color = TextLowContrast
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Text(
+                                    text = "${track.durationFormatted} · ${track.sizeFormatted}",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    color = TextLowContrast,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    // 右侧：队列项控制按钮
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (isPlayingThis) {
+                            IconButton(
+                                onClick = onStopPlayback,
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(SurfaceContainerHigh)
+                                    .testTag("btn_stop_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "停止",
+                                    tint = StatusRed,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = onTogglePlayPause,
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(AwsAmber)
+                                    .testTag("btn_pause_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Pause,
+                                    contentDescription = "暂停",
+                                    tint = AetherVoid,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        } else if (isPausedThis) {
+                            IconButton(
+                                onClick = onStopPlayback,
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(SurfaceContainerHigh)
+                                    .testTag("btn_stop_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "停止",
+                                    tint = TextMediumContrast,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = onTogglePlayPause,
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(ElectricCyan)
+                                    .testTag("btn_resume_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "继续播放",
+                                    tint = AetherVoid,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        } else {
+                            if (!isNextUp) {
+                                IconButton(
+                                    onClick = { onEnqueueNext(track) },
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .testTag("btn_play_next_${track.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.QueuePlayNext,
+                                        contentDescription = "下一首播放 (优先插队)",
+                                        tint = ElectricCyanDim,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = { onPlayTrack(track) },
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(SurfaceContainerHigh)
+                                    .testTag("btn_play_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "立即播放",
+                                    tint = TextHighContrast,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { onRemoveTrack(track) },
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .testTag("btn_remove_${track.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "从队列移除",
+                                    tint = TextLowContrast,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

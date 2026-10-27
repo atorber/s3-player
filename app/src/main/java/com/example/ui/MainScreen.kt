@@ -130,8 +130,8 @@ fun MainScreen(viewModel: AetherViewModel) {
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.navigationBars)
             ) {
-                // Persistent Floating Dock Player
-                if (playerState.currentTrack != null) {
+                // Persistent Floating Dock Player (hidden on Playlist tab since Playlist has the full Master Player Hero Console)
+                if (navState.activeTab != 1 && playerState.currentTrack != null) {
                     AetherDockPlayer(
                         playerState = playerState,
                         onExpandPlayer = { viewModel.setExpandedPlayerVisible(true) },
@@ -195,6 +195,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                         onPlayAll = viewModel::playAllInDirectory,
                         onForceScan = viewModel::forceScanNow,
                         onAddToQueue = viewModel::addToQueue,
+                        onEnqueueNext = viewModel::enqueueTrackNext,
                         onToggleFavorite = viewModel::toggleFavorite,
                         onToggleCache = viewModel::toggleCacheLocally,
                         onDeleteTrack = viewModel::deleteTrack,
@@ -228,6 +229,12 @@ fun MainScreen(viewModel: AetherViewModel) {
                         onPlayTrack = viewModel::playTrackFromPlaylist,
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onStopPlayback = viewModel::stopPlayback,
+                        onSeekTo = viewModel::seekTo,
+                        onSkipBackward10 = viewModel::skipBackward10s,
+                        onSkipForward30 = viewModel::skipForward30s,
+                        onPlayNext = viewModel::playNext,
+                        onPlayPrevious = viewModel::playPrevious,
+                        onSetPlaybackSpeed = viewModel::setPlaybackSpeed,
                         onPlayNewArrival = {
                             val newArrival = realtimeBannerTrack ?: playlistQueue.firstOrNull()
                             newArrival?.let { viewModel.playTrackFromPlaylist(it) }
@@ -236,6 +243,11 @@ fun MainScreen(viewModel: AetherViewModel) {
                         onToggleAutoPlayNew = viewModel::toggleAutoPlayNew,
                         onToggleRepeat = viewModel::toggleLoopMode,
                         onClearPlayed = viewModel::clearPlayedQueue,
+                        onClearAll = viewModel::clearAllQueue,
+                        onRemoveTrack = viewModel::removeFromQueue,
+                        onEnqueueNext = viewModel::enqueueTrackNext,
+                        onOpenTelemetry = { viewModel.setTelemetryInspectorVisible(true) },
+                        onNavigateToBrowser = { viewModel.setActiveTab(0) }
                     )
                 }
                 2 -> {
