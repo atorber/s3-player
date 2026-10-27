@@ -17,3 +17,4 @@ local.properties
 .env
 debug.keystore
 .vscode/
+.backup_data/

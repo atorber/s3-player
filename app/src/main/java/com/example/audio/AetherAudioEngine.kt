@@ -8,8 +8,10 @@ import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.media.audiofx.Equalizer
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import com.example.data.model.S3AudioTrack
+import com.example.service.AetherPlaybackService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -91,6 +93,39 @@ class AetherAudioEngine(
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    init {
+        _engineFlow.value = this
+        try {
+            wakeLock = powerManager?.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "AetherAudioEngine::PlaybackWakeLock"
+            )?.apply {
+                setReferenceCounted(false)
+            }
+        } catch (e: Exception) {
+            Log.w("AetherAudio", "WakeLock init failed: ${e.message}")
+        }
+    }
+
+    private fun acquireWakeLock() {
+        try {
+            if (wakeLock?.isHeld != true) {
+                wakeLock?.acquire(60 * 60 * 1000L) // 1 hour safety timeout
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        } catch (_: Exception) {}
+    }
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -244,6 +279,7 @@ class AetherAudioEngine(
             requestAudioFocus()
 
             val player = MediaPlayer().apply {
+                setWakeMode(context.applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -287,6 +323,8 @@ class AetherAudioEngine(
                     }
 
                     mp.start()
+                    acquireWakeLock()
+                    AetherPlaybackService.start(context)
                     startProgressTracker()
                     startTelemetryStream()
                 }
@@ -359,6 +397,7 @@ class AetherAudioEngine(
         when (current.status) {
             PlaybackStatus.PLAYING -> {
                 mediaPlayer?.pause()
+                releaseWakeLock()
                 progressJob?.cancel()
                 telemetryJob?.cancel()
                 _playerState.update {
@@ -373,6 +412,8 @@ class AetherAudioEngine(
                 if (mediaPlayer != null) {
                     try {
                         mediaPlayer?.start()
+                        acquireWakeLock()
+                        AetherPlaybackService.start(context)
                         _playerState.update { it.copy(status = PlaybackStatus.PLAYING) }
                         startProgressTracker()
                         startTelemetryStream()
@@ -453,6 +494,7 @@ class AetherAudioEngine(
     fun stopPlayback() {
         stopCurrent()
         abandonAudioFocus()
+        AetherPlaybackService.stop(context)
         _playerState.update {
             it.copy(
                 status = PlaybackStatus.IDLE,
@@ -631,6 +673,7 @@ class AetherAudioEngine(
     }
 
     private fun stopCurrent() {
+        releaseWakeLock()
         progressJob?.cancel()
         telemetryJob?.cancel()
         try {
@@ -647,5 +690,17 @@ class AetherAudioEngine(
     fun release() {
         stopCurrent()
         abandonAudioFocus()
+        AetherPlaybackService.stop(context)
+        if (_engineFlow.value == this) {
+            _engineFlow.value = null
+        }
+    }
+
+    companion object {
+        private val _engineFlow = MutableStateFlow<AetherAudioEngine?>(null)
+        val engineFlow: StateFlow<AetherAudioEngine?> = _engineFlow.asStateFlow()
+
+        val currentEngine: AetherAudioEngine?
+            get() = _engineFlow.value
     }
 }
