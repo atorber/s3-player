@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import com.example.data.SampleData
 import com.example.data.local.S3BucketDao
 import com.example.data.local.S3TrackDao
 import com.example.data.model.S3AudioTrack
@@ -28,22 +29,12 @@ class S3AudioRepository(
             // Initialize active bucket configuration if not present
             val existingBuckets = bucketDao.getAllBuckets().first()
             if (existingBuckets.isEmpty()) {
-                bucketDao.insert(
-                    S3Bucket(
-                        bucketName = "xtrader",
-                        region = "cn-north-3",
-                        provider = "S3 兼容协议 (浪潮云 OSS)",
-                        endpoint = "xtrader.oss.cn-north-3.inspurcloudoss.com",
-                        latencyMs = 0,
-                        objectCount = 0,
-                        storageSizeFormatted = "0 B",
-                        isMounted = true,
-                        authType = "S3 SigV4 认证",
-                        usePathStyle = false,
-                        useSsl = true,
-                        accessKey = ""
-                    )
-                )
+                SampleData.initialBuckets.forEach { bucketDao.insert(it) }
+            }
+            // Seed initial sample tracks if empty to ensure search & offline browsing work immediately
+            val existingTracks = trackDao.getAllTracksList()
+            if (existingTracks.isEmpty()) {
+                trackDao.insertAll(SampleData.getInitialTracks())
             }
         }
     }

@@ -165,8 +165,9 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         repository.allTracks,
         _selectedBucketName,
         _currentPrefix,
-        _customFolders
-    ) { tracks, bucketName, currentPrefix, customFolders ->
+        _customFolders,
+        _searchQuery
+    ) { tracks, bucketName, currentPrefix, customFolders, query ->
         val bucketTracks = if (bucketName != null && bucketName != "ALL") {
             tracks.filter { it.bucketName.equals(bucketName, ignoreCase = true) }
         } else {
@@ -211,7 +212,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
-        folderMap.map { (fullPrefix, stats) ->
+        val allFolders = folderMap.map { (fullPrefix, stats) ->
             val folderName = fullPrefix.removePrefix(prefixNorm)
             S3FolderItem(
                 name = folderName,
@@ -219,6 +220,13 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 itemCount = stats.first,
                 totalSizeBytes = stats.second
             )
+        }
+
+        val q = query.trim()
+        if (q.isNotBlank()) {
+            allFolders.filter { it.name.contains(q, ignoreCase = true) || it.fullPrefix.contains(q, ignoreCase = true) }
+        } else {
+            allFolders
         }.sortedBy { it.name.lowercase() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -313,18 +321,29 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         repository.allTracks,
         _selectedBucketName,
         _currentPrefix,
-        _isRecursiveScan
-    ) { tracks, bucketName, currentPrefix, isRecursive ->
+        _isRecursiveScan,
+        _searchQuery
+    ) { tracks, bucketName, currentPrefix, isRecursive, query ->
         val prefixNorm = if (currentPrefix.isBlank() || currentPrefix.endsWith("/")) currentPrefix else "$currentPrefix/"
         var list = if (bucketName != null && bucketName != "ALL") {
             tracks.filter { it.bucketName.equals(bucketName, ignoreCase = true) }
         } else {
             tracks
         }
-        list = if (isRecursive) {
+        val shouldSearchDeep = isRecursive || query.isNotBlank()
+        list = if (shouldSearchDeep) {
             list.filter { it.key.startsWith(prefixNorm) }
         } else {
             list.filter { it.key.startsWith(prefixNorm) && !it.key.removePrefix(prefixNorm).contains('/') }
+        }
+
+        val q = query.trim()
+        if (q.isNotBlank()) {
+            list = list.filter {
+                it.title.contains(q, ignoreCase = true) ||
+                it.key.contains(q, ignoreCase = true) ||
+                it.artistOrProject.contains(q, ignoreCase = true)
+            }
         }
 
         val map = mutableMapOf<String, Int>()
@@ -342,15 +361,17 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             repository.allTracks,
             _selectedBucketName,
             _currentPrefix,
-            _isRecursiveScan
-        ) { tracks, bucketName, currentPrefix, isRecursive ->
+            _isRecursiveScan,
+            _searchQuery
+        ) { tracks, bucketName, currentPrefix, isRecursive, query ->
             val prefixNorm = if (currentPrefix.isBlank() || currentPrefix.endsWith("/")) currentPrefix else "$currentPrefix/"
             val bucketTracks = if (bucketName != null && bucketName != "ALL") {
                 tracks.filter { it.bucketName.equals(bucketName, ignoreCase = true) }
             } else {
                 tracks
             }
-            if (isRecursive) {
+            val shouldSearchDeep = isRecursive || query.isNotBlank()
+            if (shouldSearchDeep) {
                 bucketTracks.filter { it.key.startsWith(prefixNorm) }
             } else {
                 bucketTracks.filter { it.key.startsWith(prefixNorm) && !it.key.removePrefix(prefixNorm).contains('/') }
@@ -362,11 +383,12 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     ) { tracksInFolder, formatFilter, query, sort ->
         var list = tracksInFolder
 
-        if (query.isNotBlank()) {
+        val q = query.trim()
+        if (q.isNotBlank()) {
             list = list.filter {
-                it.title.contains(query, ignoreCase = true) ||
-                it.key.contains(query, ignoreCase = true) ||
-                it.artistOrProject.contains(query, ignoreCase = true)
+                it.title.contains(q, ignoreCase = true) ||
+                it.key.contains(q, ignoreCase = true) ||
+                it.artistOrProject.contains(q, ignoreCase = true)
             }
         }
 

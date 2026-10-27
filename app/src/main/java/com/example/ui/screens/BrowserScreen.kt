@@ -184,195 +184,166 @@ fun BrowserScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("browser_path_card"),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = AetherSurface),
                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Row 1: 可滚动面包屑路径 + 右侧高频工具图标组
+                    // Row 1: 存储桶标识信息 + 右侧操作工具栏 (统一 34dp 矩形圆角 Box 按钮，杜绝 Material3 默认 48dp 挤压变形问题)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // 左侧：可点击级联面包屑 (s3://bucket > folder1 > folder2)
+                        // 左侧：存储桶图标与名称
                         Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .horizontalScroll(rememberScrollState()),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
                         ) {
-                            // 根存储桶 Chip
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        if (currentPrefix.isBlank()) ElectricCyan.copy(alpha = 0.18f)
-                                        else SurfaceContainerLow
-                                    )
-                                    .border(
-                                        1.dp,
-                                        if (currentPrefix.isBlank()) ElectricCyan.copy(alpha = 0.5f) else Color.Transparent,
-                                        RoundedCornerShape(6.dp)
-                                    )
-                                    .clickable { onNavigateToRoot() }
-                                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                                    .testTag("btn_navigate_root")
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(AwsAmber.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Storage,
-                                        contentDescription = "存储桶根目录",
-                                        tint = if (currentPrefix.isBlank()) ElectricCyan else AwsAmber,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = currentBucket,
-                                        color = if (currentPrefix.isBlank()) ElectricCyan else TextHighContrast,
-                                        fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            var accumulatedPath = ""
-                            pathSegments.forEachIndexed { index, segment ->
-                                accumulatedPath += "$segment/"
-                                val targetPath = accumulatedPath
-                                val isLast = index == pathSegments.lastIndex
-
                                 Icon(
-                                    imageVector = Icons.Default.ChevronRight,
+                                    imageVector = Icons.Default.Storage,
                                     contentDescription = null,
-                                    tint = TextLowContrast,
-                                    modifier = Modifier.size(14.dp)
+                                    tint = AwsAmber,
+                                    modifier = Modifier.size(17.dp)
                                 )
-
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(
-                                            if (isLast) ElectricCyan.copy(alpha = 0.18f)
-                                            else SurfaceContainerLow
-                                        )
-                                        .border(
-                                            1.dp,
-                                            if (isLast) ElectricCyan.copy(alpha = 0.5f) else Color.Transparent,
-                                            RoundedCornerShape(6.dp)
-                                        )
-                                        .clickable { onNavigateToPrefix(targetPath) }
-                                        .padding(horizontal = 8.dp, vertical = 5.dp)
-                                ) {
-                                    Text(
-                                        text = segment,
-                                        color = if (isLast) ElectricCyan else TextMediumContrast,
-                                        fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = if (isLast) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = currentBucket,
+                                    color = TextHighContrast,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (currentPrefix.isBlank()) "根目录 /" else "/$currentPrefix",
+                                    color = TextLowContrast,
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
 
-                        // 右侧：紧凑工具栏 (返回上级 / 定位播放曲目 / 递归扫描 / 搜索筛选 / 刷新)
+                        // 右侧：紧凑工具栏 (返回上级 / 定位播放 / 递归开关 / 搜索 / 刷新)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             if (currentPrefix.isNotBlank()) {
-                                IconButton(
-                                    onClick = onNavigateUp,
+                                Box(
                                     modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(SurfaceContainerLow)
-                                        .testTag("btn_navigate_up")
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(SurfaceContainerHigh)
+                                        .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
+                                        .clickable { onNavigateUp() }
+                                        .testTag("btn_navigate_up"),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ArrowUpward,
                                         contentDescription = "返回上一级",
                                         tint = ElectricCyan,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
 
                             if (playerState.currentTrack != null) {
-                                IconButton(
-                                    onClick = onLocatePlayingTrack,
+                                Box(
                                     modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(SurfaceContainerLow)
-                                        .testTag("btn_locate_playing")
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(SurfaceContainerHigh)
+                                        .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
+                                        .clickable { onLocatePlayingTrack() }
+                                        .testTag("btn_locate_playing"),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.MyLocation,
                                         contentDescription = "定位当前播放曲目所在目录",
                                         tint = AwsAmber,
-                                        modifier = Modifier.size(15.dp)
+                                        modifier = Modifier.size(17.dp)
                                     )
                                 }
                             }
 
-                            IconButton(
-                                onClick = onToggleRecursiveScan,
+                            Box(
                                 modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        if (isRecursiveScan) AwsAmber.copy(alpha = 0.2f)
-                                        else SurfaceContainerLow
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isRecursiveScan) AwsAmber.copy(alpha = 0.2f) else SurfaceContainerHigh)
+                                    .border(
+                                        1.dp,
+                                        if (isRecursiveScan) AwsAmber.copy(alpha = 0.6f) else BorderSubtle,
+                                        RoundedCornerShape(8.dp)
                                     )
-                                    .testTag("btn_toggle_recursive")
+                                    .clickable { onToggleRecursiveScan() }
+                                    .testTag("btn_toggle_recursive"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.AccountTree,
                                     contentDescription = if (isRecursiveScan) "已开启子目录穿透" else "仅显示当前层级",
-                                    tint = if (isRecursiveScan) AwsAmber else TextLowContrast,
-                                    modifier = Modifier.size(15.dp)
+                                    tint = if (isRecursiveScan) AwsAmber else TextMediumContrast,
+                                    modifier = Modifier.size(17.dp)
                                 )
                             }
 
-                            IconButton(
-                                onClick = { isSearchExpanded = !isSearchExpanded },
+                            Box(
                                 modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        if (isSearchExpanded || hasActiveFilter) ElectricCyan.copy(alpha = 0.2f)
-                                        else SurfaceContainerLow
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSearchExpanded || hasActiveFilter) ElectricCyan.copy(alpha = 0.2f) else SurfaceContainerHigh)
+                                    .border(
+                                        1.dp,
+                                        if (isSearchExpanded || hasActiveFilter) ElectricCyan.copy(alpha = 0.6f) else BorderSubtle,
+                                        RoundedCornerShape(8.dp)
                                     )
-                                    .testTag("btn_toggle_search")
+                                    .clickable { isSearchExpanded = !isSearchExpanded }
+                                    .testTag("btn_toggle_search"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Search,
                                     contentDescription = "搜索与格式筛选",
-                                    tint = if (isSearchExpanded || hasActiveFilter) ElectricCyan else TextLowContrast,
-                                    modifier = Modifier.size(16.dp)
+                                    tint = if (isSearchExpanded || hasActiveFilter) ElectricCyan else TextMediumContrast,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
 
-                            IconButton(
-                                onClick = onForceScan,
+                            Box(
                                 modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(SurfaceContainerLow)
-                                    .testTag("btn_force_scan")
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(SurfaceContainerHigh)
+                                    .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
+                                    .clickable { onForceScan() }
+                                    .testTag("btn_force_scan"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 if (isScanning) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
+                                        modifier = Modifier.size(16.dp),
                                         strokeWidth = 2.dp,
                                         color = ElectricCyan
                                     )
@@ -381,9 +352,78 @@ fun BrowserScreen(
                                         imageVector = Icons.Default.Refresh,
                                         contentDescription = "刷新目录",
                                         tint = TextMediumContrast,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    // Row 2: 独立完整的全宽面包屑路径栏 (可点击层级回退)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerLowest.copy(alpha = 0.85f))
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 根目录 Chip
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (currentPrefix.isBlank()) ElectricCyan.copy(alpha = 0.2f) else SurfaceContainerLow)
+                                .border(
+                                    1.dp,
+                                    if (currentPrefix.isBlank()) ElectricCyan.copy(alpha = 0.5f) else Color.Transparent,
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .clickable { onNavigateToRoot() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .testTag("btn_navigate_root")
+                        ) {
+                            Text(
+                                text = "根目录 /",
+                                color = if (currentPrefix.isBlank()) ElectricCyan else TextMediumContrast,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = if (currentPrefix.isBlank()) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+
+                        var accumulatedPath = ""
+                        pathSegments.forEachIndexed { index, segment ->
+                            accumulatedPath += "$segment/"
+                            val targetPath = accumulatedPath
+                            val isLast = index == pathSegments.lastIndex
+
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = TextLowContrast,
+                                modifier = Modifier.size(14.dp)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isLast) ElectricCyan.copy(alpha = 0.2f) else SurfaceContainerLow)
+                                    .border(
+                                        1.dp,
+                                        if (isLast) ElectricCyan.copy(alpha = 0.5f) else Color.Transparent,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { onNavigateToPrefix(targetPath) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "$segment/",
+                                    color = if (isLast) ElectricCyan else TextMediumContrast,
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = if (isLast) FontWeight.Bold else FontWeight.Normal
+                                )
                             }
                         }
                     }
@@ -563,7 +603,7 @@ fun BrowserScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "下级目录 (${folders.size})",
+                            text = if (searchQuery.isNotBlank()) "匹配的目录 (${folders.size})" else "下级目录 (${folders.size})",
                             color = TextHighContrast,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -727,7 +767,11 @@ fun BrowserScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isRecursiveScan) "音频文件 · 含子目录 (${tracks.size})" else "音频文件 (${tracks.size})",
+                            text = when {
+                                searchQuery.isNotBlank() -> "搜索结果 (${tracks.size})"
+                                isRecursiveScan -> "音频文件 · 含子目录 (${tracks.size})"
+                                else -> "音频文件 (${tracks.size})"
+                            },
                             color = TextHighContrast,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -891,8 +935,9 @@ fun BrowserScreen(
                                             modifier = Modifier.size(12.dp)
                                         )
                                     }
+                                    val folderPrefix = if (track.key.contains('/')) "📁 " + track.key.substringBeforeLast('/') + "/ · " else ""
                                     Text(
-                                        text = "${track.durationFormatted} · ${track.sizeFormatted}" +
+                                        text = "${if (searchQuery.isNotBlank() || isRecursiveScan) folderPrefix else ""}${track.durationFormatted} · ${track.sizeFormatted}" +
                                                 if (isRecursiveScan) " · ${track.artistOrProject}" else "",
                                         color = TextLowContrast,
                                         fontSize = 10.sp,

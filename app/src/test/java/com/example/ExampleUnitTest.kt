@@ -45,4 +45,16 @@ class ExampleUnitTest {
         assertTrue("Tracks must not be empty", tracks.isNotEmpty())
         assertTrue("At least 5 tracks should exist", tracks.size >= 5)
     }
+
+    @Test
+    fun s3Track_searchFilter_matchesTitleAndKey() {
+        val tracks = SampleData.getInitialTracks()
+        val query = "analog"
+        val matched = tracks.filter {
+            it.title.contains(query, ignoreCase = true) ||
+            it.key.contains(query, ignoreCase = true) ||
+            it.artistOrProject.contains(query, ignoreCase = true)
+        }
+        assertTrue("Search for 'analog' should match tracks", matched.isNotEmpty())
+    }
 }
