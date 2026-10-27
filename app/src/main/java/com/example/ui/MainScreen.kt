@@ -223,6 +223,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                         playerState = playerState,
                         isBannerVisible = isRealtimeBannerVisible,
                         isAutoPlayNewEnabled = isAutoPlayNewEnabled,
+                        isDirectoryMonitoringEnabled = syncSettings.isSubdirMonitoring,
                         monitoredLocation = displayLoc,
                         bannerTrack = realtimeBannerTrack,
                         onDismissBanner = viewModel::dismissRealtimeBanner,
@@ -241,6 +242,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                             viewModel.dismissRealtimeBanner()
                         },
                         onToggleAutoPlayNew = viewModel::toggleAutoPlayNew,
+                        onToggleDirectoryMonitoring = viewModel::toggleSubdirMonitoring,
                         onToggleRepeat = viewModel::toggleLoopMode,
                         onClearPlayed = viewModel::clearPlayedQueue,
                         onClearAll = viewModel::clearAllQueue,

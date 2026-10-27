@@ -59,8 +59,12 @@ class AetherPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean("isSnsNotification", value).apply()
 
     var enqueueRule: String
-        get() = prefs.getString("enqueueRule", "upnext") ?: "upnext"
+        get() = prefs.getString("enqueueRule", "append") ?: "append"
         set(value) = prefs.edit().putString("enqueueRule", value).apply()
+
+    var monitoredPlaylistPrefix: String?
+        get() = prefs.getString("monitoredPlaylistPrefix", null)
+        set(value) = prefs.edit().putString("monitoredPlaylistPrefix", value).apply()
 
     var enabledFormats: Set<String>
         get() = prefs.getStringSet("enabledFormats", setOf(".flac", ".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus"))

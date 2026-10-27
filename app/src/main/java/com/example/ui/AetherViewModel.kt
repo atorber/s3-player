@@ -82,7 +82,7 @@ data class SyncSettingsState(
     val isSubdirMonitoring: Boolean = true,
     val pollIntervalSec: Int = 3,
     val isSnsNotification: Boolean = false,
-    val enqueueRule: String = "upnext", // "append", "upnext", "ask"
+    val enqueueRule: String = "append", // "append", "upnext", "ask"
     val enabledFormats: Set<String> = setOf(".flac", ".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus"),
     val cachedSizeBytes: Long = 0L,
     val cacheLimitBytes: Long = 5_368_709_120L, // 5.0 GB
@@ -475,15 +475,33 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     val playlistQueue: StateFlow<List<S3AudioTrack>> = audioEngine.queueFlow
 
-    val activePlaylistPath: StateFlow<String> = combine(playerState, _currentPrefix, playlistQueue) { state, currPrefix, queue ->
-        val track = state.currentTrack ?: queue.firstOrNull()
-        if (track != null) {
-            val key = track.key.removePrefix("/")
-            if (key.contains("/")) key.substringBeforeLast("/") + "/" else ""
+    private val _monitoredPlaylistPrefix = MutableStateFlow<String?>(preferences.monitoredPlaylistPrefix)
+
+    private fun updateMonitoredPlaylistPrefix(prefix: String) {
+        val clean = prefix.trim().trim('/')
+        val norm = if (clean.isBlank()) "" else "$clean/"
+        _monitoredPlaylistPrefix.value = norm
+        preferences.monitoredPlaylistPrefix = norm
+    }
+
+    val activePlaylistPath: StateFlow<String> = combine(
+        _monitoredPlaylistPrefix,
+        playerState,
+        _currentPrefix,
+        playlistQueue
+    ) { monitored, state, currPrefix, queue ->
+        if (monitored != null) {
+            monitored
         } else {
-            currPrefix
+            val track = state.currentTrack ?: queue.firstOrNull()
+            if (track != null) {
+                val key = track.key.removePrefix("/")
+                if (key.contains("/")) key.substringBeforeLast("/") + "/" else ""
+            } else {
+                currPrefix
+            }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, preferences.monitoredPlaylistPrefix ?: "")
 
     init {
         viewModelScope.launch {
@@ -576,6 +594,9 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun playTrackFromBrowser(track: S3AudioTrack) {
+        val key = track.key.trim().removePrefix("/")
+        val folderPrefix = if (key.contains("/")) key.substringBeforeLast("/") + "/" else ""
+        updateMonitoredPlaylistPrefix(folderPrefix)
         audioEngine.playTrack(track, browserTracks.value)
     }
 
@@ -703,10 +724,13 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun toggleSubdirMonitoring() {
+        val next = !_syncSettings.value.isSubdirMonitoring
         _syncSettings.update {
-            val next = !it.isSubdirMonitoring
             preferences.isSubdirMonitoring = next
             it.copy(isSubdirMonitoring = next)
+        }
+        viewModelScope.launch {
+            _toastEvent.emit(if (next) "目录监听已开启：自动检测当前播放列表目录新增音频" else "目录监听已暂停")
         }
     }
 
@@ -861,25 +885,40 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun playAllInDirectory() {
         viewModelScope.launch {
+            updateMonitoredPlaylistPrefix(_currentPrefix.value)
             val tracks = browserTracks.value
             if (tracks.isNotEmpty()) {
                 audioEngine.playTrack(tracks.first(), tracks)
-                _toastEvent.emit("已开始播放当前目录全部音频 (${tracks.size} 首)")
+                _toastEvent.emit("已将当前目录创建为播放列表并开始播放 (${tracks.size} 首)")
             } else {
-                _toastEvent.emit("当前目录暂无可播放音频")
+                _toastEvent.emit("已绑定监听当前目录，有新音频上传将自动加入并播放")
             }
         }
     }
 
     fun addCurrentDirectoryToPlaylist() {
         viewModelScope.launch {
+            updateMonitoredPlaylistPrefix(_currentPrefix.value)
             val tracks = browserTracks.value
             if (tracks.isNotEmpty()) {
-                audioEngine.addAllToQueue(tracks)
-                _toastEvent.emit("已将当前目录全部音频 (${tracks.size} 首) 添加到播放列表")
+                audioEngine.updateQueue(tracks)
+                _toastEvent.emit("已将当前目录创建为播放列表 (${tracks.size} 首)")
             } else {
-                _toastEvent.emit("当前目录暂无可添加音频")
+                audioEngine.clearQueue()
+                _toastEvent.emit("已将当前空目录设为播放列表并开启监听")
             }
+        }
+    }
+
+    private fun sortFolderTracks(tracks: List<S3AudioTrack>): List<S3AudioTrack> {
+        return when (_sortMode.value) {
+            TrackSortMode.NAME_ASC -> tracks.sortedBy { it.title.lowercase() }
+            TrackSortMode.NAME_DESC -> tracks.sortedByDescending { it.title.lowercase() }
+            TrackSortMode.DATE_DESC -> tracks.sortedByDescending { it.lastModified }
+            TrackSortMode.DATE_ASC -> tracks.sortedBy { it.lastModified }
+            TrackSortMode.SIZE_DESC -> tracks.sortedByDescending { it.sizeBytes }
+            TrackSortMode.SIZE_ASC -> tracks.sortedBy { it.sizeBytes }
+            TrackSortMode.DURATION_DESC -> tracks.sortedByDescending { it.durationMs }
         }
     }
 
@@ -888,15 +927,19 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val bucketName = _selectedBucketName.value ?: syncSettings.value.currentBucketName
             val cleanPrefix = folderPrefix.trim().trim('/')
             val norm = if (cleanPrefix.isBlank()) "" else "$cleanPrefix/"
+            updateMonitoredPlaylistPrefix(norm)
+
             val all = repository.allTracks.first()
-            val folderTracks = all.filter {
-                (bucketName == "ALL" || it.bucketName.equals(bucketName, ignoreCase = true)) &&
-                it.key.trim().removePrefix("/").startsWith(norm)
-            }
+            val folderTracks = sortFolderTracks(
+                all.filter {
+                    (bucketName == "ALL" || it.bucketName.equals(bucketName, ignoreCase = true)) &&
+                    it.key.trim().removePrefix("/").startsWith(norm)
+                }
+            )
             if (folderTracks.isNotEmpty()) {
-                audioEngine.addAllToQueue(folderTracks)
+                audioEngine.updateQueue(folderTracks)
                 val folderName = norm.trimEnd('/').substringAfterLast('/')
-                _toastEvent.emit("已将目录「$folderName/」(${folderTracks.size} 首) 添加到播放列表")
+                _toastEvent.emit("已将目录「$folderName/」创建为播放列表并开启监听 (${folderTracks.size} 首)")
             } else {
                 val settings = _syncSettings.value
                 val fetchResult = repository.syncRemoteS3(
@@ -907,20 +950,23 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                     region = settings.region,
                     accessKeyId = settings.accessKeyId,
                     secretAccessKey = settings.secretAccessKey,
+                    sessionToken = settings.sessionToken,
                     usePathStyle = settings.usePathStyle,
                     useTls = settings.isTlsEncrypted,
                     isPublicAccess = settings.isPublicAccess
                 )
                 fetchResult.onSuccess { res ->
-                    if (res.tracks.isNotEmpty()) {
-                        audioEngine.addAllToQueue(res.tracks)
+                    val sorted = sortFolderTracks(res.tracks)
+                    if (sorted.isNotEmpty()) {
+                        audioEngine.updateQueue(sorted)
                         val folderName = norm.trimEnd('/').substringAfterLast('/')
-                        _toastEvent.emit("已将目录「$folderName/」(${res.tracks.size} 首) 添加到播放列表")
+                        _toastEvent.emit("已将目录「$folderName/」创建为播放列表并开启监听 (${sorted.size} 首)")
                     } else {
-                        _toastEvent.emit("子目录 [$norm] 暂无音频文件")
+                        audioEngine.clearQueue()
+                        _toastEvent.emit("已监听目录 [$norm]，新音频上传后将自动加入播放")
                     }
                 }.onFailure {
-                    _toastEvent.emit("加入播放列表失败：${it.message}")
+                    _toastEvent.emit("创建播放列表失败：${it.message}")
                 }
             }
         }
@@ -931,15 +977,19 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val bucketName = _selectedBucketName.value ?: syncSettings.value.currentBucketName
             val cleanPrefix = folderPrefix.trim().trim('/')
             val norm = if (cleanPrefix.isBlank()) "" else "$cleanPrefix/"
+            updateMonitoredPlaylistPrefix(norm)
+
             val all = repository.allTracks.first()
-            val folderTracks = all.filter {
-                (bucketName == "ALL" || it.bucketName.equals(bucketName, ignoreCase = true)) &&
-                it.key.trim().removePrefix("/").startsWith(norm)
-            }
+            val folderTracks = sortFolderTracks(
+                all.filter {
+                    (bucketName == "ALL" || it.bucketName.equals(bucketName, ignoreCase = true)) &&
+                    it.key.trim().removePrefix("/").startsWith(norm)
+                }
+            )
             if (folderTracks.isNotEmpty()) {
                 audioEngine.playTrack(folderTracks.first(), folderTracks)
                 val folderName = norm.trimEnd('/').substringAfterLast('/')
-                _toastEvent.emit("正在播放目录「$folderName/」(${folderTracks.size} 首)")
+                _toastEvent.emit("正在播放目录「$folderName/」并监听新音频 (${folderTracks.size} 首)")
             } else {
                 val settings = _syncSettings.value
                 val fetchResult = repository.syncRemoteS3(
@@ -950,17 +1000,19 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                     region = settings.region,
                     accessKeyId = settings.accessKeyId,
                     secretAccessKey = settings.secretAccessKey,
+                    sessionToken = settings.sessionToken,
                     usePathStyle = settings.usePathStyle,
                     useTls = settings.isTlsEncrypted,
                     isPublicAccess = settings.isPublicAccess
                 )
                 fetchResult.onSuccess { res ->
-                    if (res.tracks.isNotEmpty()) {
-                        audioEngine.playTrack(res.tracks.first(), res.tracks)
+                    val sorted = sortFolderTracks(res.tracks)
+                    if (sorted.isNotEmpty()) {
+                        audioEngine.playTrack(sorted.first(), sorted)
                         val folderName = norm.trimEnd('/').substringAfterLast('/')
-                        _toastEvent.emit("正在播放目录「$folderName/」(${res.tracks.size} 首)")
+                        _toastEvent.emit("正在播放目录「$folderName/」并监听新音频 (${sorted.size} 首)")
                     } else {
-                        _toastEvent.emit("该子目录下暂无可播放音频")
+                        _toastEvent.emit("该子目录下暂无音频，已开启监听等待新文件上传")
                     }
                 }.onFailure {
                     _toastEvent.emit("加载并播放失败：${it.message}")
@@ -1018,14 +1070,16 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
         val cleanTargetPrefix = activePlaylistPath.value.removePrefix("/")
 
-        val knownTrackKeys = repository.allTracks.first().map { it.key }.toSet()
+        val existingTracks = repository.allTracks.first()
+        val knownTrackKeys = existingTracks.map { it.key }.toSet()
+        val currentQueueKeys = playlistQueue.value.map { it.key }.toSet()
         val allowedExts = settings.enabledFormats.map { it.removePrefix(".").lowercase() }.toSet()
 
         val result = repository.syncRemoteS3(
             endpoint = settings.endpoint,
             bucketName = bucketName,
             prefix = cleanTargetPrefix,
-            delimiter = if (_isRecursiveScan.value) "" else "/",
+            delimiter = "",
             region = settings.region,
             accessKeyId = settings.accessKeyId,
             secretAccessKey = settings.secretAccessKey,
@@ -1043,7 +1097,18 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
 
-            val newTracks = listResult.tracks.filter { it.key !in knownTrackKeys }
+            // Filter tracks in the monitored directory that are newly uploaded
+            val rawNewTracks = listResult.tracks.filter { track ->
+                val cleanKey = track.key.trim().removePrefix("/")
+                val inTargetDir = if (_isRecursiveScan.value) {
+                    cleanKey.startsWith(cleanTargetPrefix)
+                } else {
+                    cleanKey.startsWith(cleanTargetPrefix) && !cleanKey.removePrefix(cleanTargetPrefix).contains('/')
+                }
+                inTargetDir && track.key !in knownTrackKeys && track.key !in currentQueueKeys
+            }
+            val newTracks = sortFolderTracks(rawNewTracks)
+
             if (newTracks.isNotEmpty()) {
                 val playerStatus = audioEngine.playerState.value.status
                 val isCurrentlyPlaying = (playerStatus == PlaybackStatus.PLAYING ||
@@ -1053,20 +1118,20 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 _realtimeBannerTrack.value = newTracks.first()
                 _isRealtimeBannerVisible.value = true
 
-                // Auto-enqueue rule
+                // Auto-enqueue rule (default "append": add to the end of the playlist)
                 withContext(Dispatchers.Main) {
                     when (settings.enqueueRule) {
-                        "append" -> audioEngine.addAllToQueue(newTracks)
                         "upnext" -> audioEngine.insertNextInQueue(newTracks)
                         "ask" -> { /* real-time banner shown */ }
+                        else -> audioEngine.addAllToQueue(newTracks)
                     }
 
                     if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
                         val trackToPlay = newTracks.first()
                         playTrackFromPlaylist(trackToPlay)
-                        _toastEvent.emit("检测到新音频，自动播放：${trackToPlay.title}")
+                        _toastEvent.emit("检测到新音频上传，已加入列表末尾并自动播放：${trackToPlay.title}")
                     } else {
-                        _toastEvent.emit("扫描到 ${newTracks.size} 个新音频已加入列表")
+                        _toastEvent.emit("监听到 ${newTracks.size} 个新音频上传，已加入播放列表末尾")
                     }
                 }
             }
@@ -1080,14 +1145,15 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
             val cleanTargetPrefix = if (targetPrefix == "/") "" else targetPrefix.removePrefix("/")
 
-            val knownTrackKeys = repository.allTracks.first().map { it.key }.toSet()
             val allowedExts = settings.enabledFormats.map { it.removePrefix(".").lowercase() }.toSet()
 
+            // Scan recursively (delimiter = "") so all subdirectories under cleanTargetPrefix
+            // that contain audio files are automatically discovered along with their track counts
             val result = repository.syncRemoteS3(
                 endpoint = settings.endpoint,
                 bucketName = bucketName,
                 prefix = cleanTargetPrefix,
-                delimiter = if (_isRecursiveScan.value) "" else "/",
+                delimiter = "",
                 region = settings.region,
                 accessKeyId = settings.accessKeyId,
                 secretAccessKey = settings.secretAccessKey,
@@ -1105,37 +1171,20 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                         (current + listResult.commonPrefixes).distinct().toSet()
                     }
                 }
-                val audioCount = listResult.tracks.size
-                val dirCount = listResult.commonPrefixes.size
+                val directTracksCount = listResult.tracks.count { track ->
+                    val cleanKey = track.key.trim().removePrefix("/")
+                    cleanKey.startsWith(cleanTargetPrefix) && !cleanKey.removePrefix(cleanTargetPrefix).contains('/')
+                }
+                val audioDirsCount = listResult.tracks
+                    .mapNotNull { track ->
+                        val rel = track.key.trim().removePrefix("/").removePrefix(cleanTargetPrefix)
+                        if (rel.contains('/')) rel.substringBefore('/') else null
+                    }
+                    .distinct()
+                    .size
                 val pathDisplay = if (cleanTargetPrefix.isBlank()) "根目录 /" else "/$cleanTargetPrefix"
 
-                val newTracks = listResult.tracks.filter { it.key !in knownTrackKeys }
-                if (newTracks.isNotEmpty()) {
-                    val playerStatus = audioEngine.playerState.value.status
-                    val isCurrentlyPlaying = (playerStatus == PlaybackStatus.PLAYING ||
-                            playerStatus == PlaybackStatus.BUFFERING ||
-                            playerStatus == PlaybackStatus.CONNECTING)
-
-                    _realtimeBannerTrack.value = newTracks.first()
-                    _isRealtimeBannerVisible.value = true
-
-                    withContext(Dispatchers.Main) {
-                        when (settings.enqueueRule) {
-                            "append" -> audioEngine.addAllToQueue(newTracks)
-                            "upnext" -> audioEngine.insertNextInQueue(newTracks)
-                            "ask" -> { /* banner */ }
-                        }
-
-                        if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
-                            val trackToPlay = newTracks.first()
-                            playTrackFromPlaylist(trackToPlay)
-                            _toastEvent.emit("扫描到新音频，已自动播放：${trackToPlay.title}")
-                            return@withContext
-                        }
-                    }
-                }
-
-                _toastEvent.emit("S3 远端同步成功 · 路径 [$pathDisplay]：获取到 $audioCount 个音频，发现 $dirCount 个子目录")
+                _toastEvent.emit("S3 同步完成 [$pathDisplay]：发现 $audioDirsCount 个音频目录，当前层级 $directTracksCount 首音频 (共扫描 ${listResult.tracks.size} 首)")
             }.onFailure { ex ->
                 val errorMsg = ex.message ?: "网络或认证异常"
                 _toastEvent.emit("S3 同步失败：$errorMsg")

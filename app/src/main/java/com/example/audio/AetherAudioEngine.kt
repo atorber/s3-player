@@ -221,7 +221,15 @@ class AetherAudioEngine private constructor(
         val current = _playerState.value.currentTrack
         if (current != null) {
             val idx = queue.indexOfFirst { it.key == current.key && it.bucketName == current.bucketName }
-            if (idx >= 0) currentIndex = idx
+            if (idx >= 0) {
+                currentIndex = idx
+            } else if (queue.isNotEmpty() && _playerState.value.status != PlaybackStatus.PLAYING) {
+                currentIndex = 0
+                _playerState.update { it.copy(currentTrack = queue.first(), currentPositionMs = 0L, durationMs = queue.first().durationMs) }
+            }
+        } else if (queue.isNotEmpty()) {
+            currentIndex = 0
+            _playerState.update { it.copy(currentTrack = queue.first(), currentPositionMs = 0L, durationMs = queue.first().durationMs) }
         }
         persistQueueState()
     }
@@ -240,11 +248,17 @@ class AetherAudioEngine private constructor(
     fun addAllToQueue(tracks: List<S3AudioTrack>) {
         val newTracks = tracks.filter { t -> !queue.any { it.key == t.key && it.bucketName == t.bucketName } }
         queue = queue + newTracks
-        if (_playerState.value.currentTrack == null && tracks.isNotEmpty()) {
-            playTrack(tracks.first())
-        } else {
-            persistQueueState()
+        if (_playerState.value.currentTrack == null && queue.isNotEmpty()) {
+            currentIndex = 0
+            _playerState.update {
+                it.copy(
+                    currentTrack = queue.first(),
+                    currentPositionMs = 0L,
+                    durationMs = queue.first().durationMs
+                )
+            }
         }
+        persistQueueState()
     }
 
     fun insertNextInQueue(tracks: List<S3AudioTrack>) {
@@ -255,10 +269,16 @@ class AetherAudioEngine private constructor(
         mutable.addAll(insertIdx, newTracks)
         queue = mutable
         if (_playerState.value.currentTrack == null && queue.isNotEmpty()) {
-            playTrack(queue.first())
-        } else {
-            persistQueueState()
+            currentIndex = 0
+            _playerState.update {
+                it.copy(
+                    currentTrack = queue.first(),
+                    currentPositionMs = 0L,
+                    durationMs = queue.first().durationMs
+                )
+            }
         }
+        persistQueueState()
     }
 
     fun clearPlayedQueue() {
@@ -700,9 +720,17 @@ class AetherAudioEngine private constructor(
                 if (queue.isNotEmpty() && idx >= 0 && idx < queue.size - 1) {
                     playNext()
                 } else {
-                    _playerState.update { it.copy(status = PlaybackStatus.PAUSED, currentPositionMs = 0L) }
+                    releaseWakeLock()
                     progressJob?.cancel()
                     telemetryJob?.cancel()
+                    _playerState.update {
+                        it.copy(
+                            status = PlaybackStatus.PAUSED,
+                            currentPositionMs = 0L,
+                            telemetry = it.telemetry.copy(leftChannelDb = -60f, rightChannelDb = -60f)
+                        )
+                    }
+                    persistQueueState()
                 }
             }
         }
@@ -714,8 +742,9 @@ class AetherAudioEngine private constructor(
             while (isActive) {
                 val state = _playerState.value
                 if (state.status == PlaybackStatus.PLAYING && !state.isScrubbing) {
+                    val mp = mediaPlayer
                     val pos = try {
-                        mediaPlayer?.currentPosition?.toLong() ?: (state.currentPositionMs + 50L)
+                        mp?.currentPosition?.toLong() ?: (state.currentPositionMs + 50L)
                     } catch (_: Exception) {
                         state.currentPositionMs + 50L
                     }
@@ -724,15 +753,16 @@ class AetherAudioEngine private constructor(
                     if (state.loopMode == LoopMode.AB_REPEAT && state.abPointB != null && pos >= state.abPointB) {
                         val restart = state.abPointA ?: 0L
                         seekTo(restart)
-                    } else if (pos >= state.durationMs && state.durationMs > 0) {
-                        if (state.loopMode == LoopMode.SINGLE && mediaPlayer?.isLooping == true) {
-                            // Native MediaPlayer handles single track loop
-                            _playerState.update { it.copy(currentPositionMs = 0L) }
-                        } else {
-                            handleTrackCompletion()
-                        }
+                    } else if (mp == null && pos >= state.durationMs && state.durationMs > 0) {
+                        handleTrackCompletion()
                     } else {
-                        _playerState.update { it.copy(currentPositionMs = pos) }
+                        val updatedDuration = if (pos > state.durationMs) pos else state.durationMs
+                        _playerState.update {
+                            it.copy(
+                                currentPositionMs = pos,
+                                durationMs = updatedDuration
+                            )
+                        }
                     }
                 }
                 delay(40L) // 25fps fluid tick rate

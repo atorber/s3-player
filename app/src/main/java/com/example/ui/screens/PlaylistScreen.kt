@@ -108,6 +108,7 @@ fun PlaylistScreen(
     playerState: PlayerState,
     isBannerVisible: Boolean,
     isAutoPlayNewEnabled: Boolean = true,
+    isDirectoryMonitoringEnabled: Boolean = true,
     monitoredLocation: String = "s3://xtrader/",
     bannerTrack: S3AudioTrack? = null,
     onDismissBanner: () -> Unit,
@@ -122,6 +123,7 @@ fun PlaylistScreen(
     onSetPlaybackSpeed: (Float) -> Unit = {},
     onPlayNewArrival: () -> Unit,
     onToggleAutoPlayNew: () -> Unit = {},
+    onToggleDirectoryMonitoring: () -> Unit = {},
     onToggleRepeat: () -> Unit,
     onClearPlayed: () -> Unit,
     onClearAll: () -> Unit = {},
@@ -761,12 +763,46 @@ fun PlaylistScreen(
                         )
                     }
 
-                    // 右侧：队列真实操作按钮组 (新文件自动播 / 清理已播 / 清空全部)
+                    // 右侧：队列真实操作按钮组 (目录监听 / 新文件自动播 / 清理已播 / 清空全部)
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // 0. 目录监听开关
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(
+                                    if (isDirectoryMonitoringEnabled) AwsAmber.copy(alpha = 0.16f)
+                                    else SurfaceContainer
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isDirectoryMonitoringEnabled) AwsAmber.copy(alpha = 0.5f) else BorderSubtle,
+                                    RoundedCornerShape(7.dp)
+                                )
+                                .clickable { onToggleDirectoryMonitoring() }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .testTag("playlist_toggle_monitoring_btn")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Sensors,
+                                    contentDescription = "目录监听",
+                                    tint = if (isDirectoryMonitoringEnabled) AwsAmber else TextMediumContrast,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (isDirectoryMonitoringEnabled) "监听已开" else "监听已关",
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isDirectoryMonitoringEnabled) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isDirectoryMonitoringEnabled) AwsAmber else TextMediumContrast
+                                )
+                            }
+                        }
+
                         // 1. 新增音频自动播放开关
                         Box(
                             modifier = Modifier
