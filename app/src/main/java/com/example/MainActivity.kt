@@ -73,4 +73,14 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.audioEngine.persistQueueState()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        viewModel.audioEngine.persistQueueState()
+    }
 }

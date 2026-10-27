@@ -10,6 +10,7 @@ import android.media.audiofx.Equalizer
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
+import com.example.data.local.PlaylistQueueStorage
 import com.example.data.model.S3AudioTrack
 import com.example.service.AetherPlaybackService
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Random
 
 enum class PlaybackStatus {
@@ -100,6 +102,7 @@ class AetherAudioEngine private constructor(
 
     private val powerManager = this.context.getSystemService(Context.POWER_SERVICE) as? PowerManager
     private var wakeLock: PowerManager.WakeLock? = null
+    private val queueStorage = PlaylistQueueStorage(this.context)
 
     init {
         _engineFlow.value = this
@@ -112,6 +115,32 @@ class AetherAudioEngine private constructor(
             }
         } catch (e: Exception) {
             Log.w("AetherAudio", "WakeLock init failed: ${e.message}")
+        }
+
+        // Restore persisted playback queue and last track snapshot on launch
+        scope.launch(Dispatchers.IO) {
+            val restored = queueStorage.loadQueue()
+            if (restored.queue.isNotEmpty()) {
+                withContext(Dispatchers.Main) {
+                    queue = restored.queue
+                    val current = restored.currentTrack ?: restored.queue.firstOrNull()
+                    if (current != null) {
+                        val idx = restored.queue.indexOfFirst { it.key == current.key && it.bucketName == current.bucketName }
+                        currentIndex = if (idx >= 0) idx else 0
+                        _playerState.update {
+                            it.copy(
+                                currentTrack = current,
+                                status = PlaybackStatus.IDLE,
+                                currentPositionMs = restored.positionMs,
+                                durationMs = if (current.durationMs > 0) current.durationMs else 0L,
+                                bufferPercentage = if (current.isCachedLocally) 100 else 0,
+                                loopMode = restored.loopMode,
+                                playbackSpeed = restored.playbackSpeed
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -170,6 +199,23 @@ class AetherAudioEngine private constructor(
         }
     private var currentIndex: Int = -1
 
+    fun persistQueueState() {
+        val currentQueue = queue
+        val current = _playerState.value.currentTrack
+        val pos = _playerState.value.currentPositionMs
+        val loop = _playerState.value.loopMode
+        val speed = _playerState.value.playbackSpeed
+        scope.launch(Dispatchers.IO) {
+            queueStorage.saveQueue(
+                queue = currentQueue,
+                currentTrack = current,
+                currentPositionMs = pos,
+                loopMode = loop,
+                playbackSpeed = speed
+            )
+        }
+    }
+
     fun updateQueue(tracks: List<S3AudioTrack>) {
         queue = tracks
         val current = _playerState.value.currentTrack
@@ -177,6 +223,7 @@ class AetherAudioEngine private constructor(
             val idx = queue.indexOfFirst { it.key == current.key && it.bucketName == current.bucketName }
             if (idx >= 0) currentIndex = idx
         }
+        persistQueueState()
     }
 
     fun addToQueue(track: S3AudioTrack) {
@@ -185,6 +232,8 @@ class AetherAudioEngine private constructor(
         }
         if (_playerState.value.currentTrack == null) {
             playTrack(track)
+        } else {
+            persistQueueState()
         }
     }
 
@@ -193,6 +242,8 @@ class AetherAudioEngine private constructor(
         queue = queue + newTracks
         if (_playerState.value.currentTrack == null && tracks.isNotEmpty()) {
             playTrack(tracks.first())
+        } else {
+            persistQueueState()
         }
     }
 
@@ -205,6 +256,8 @@ class AetherAudioEngine private constructor(
         queue = mutable
         if (_playerState.value.currentTrack == null && queue.isNotEmpty()) {
             playTrack(queue.first())
+        } else {
+            persistQueueState()
         }
     }
 
@@ -213,6 +266,7 @@ class AetherAudioEngine private constructor(
             val remaining = queue.subList(currentIndex, queue.size).toList()
             queue = remaining
             currentIndex = 0
+            persistQueueState()
         }
     }
 
@@ -226,12 +280,16 @@ class AetherAudioEngine private constructor(
             currentIndex = -1
             stopPlayback()
             _playerState.update { it.copy(currentTrack = null) }
+            scope.launch(Dispatchers.IO) { queueStorage.clear() }
         } else if (isRemovingCurrent) {
             val nextIdx = idx.coerceAtMost(updated.lastIndex)
             currentIndex = nextIdx
             playTrack(updated[nextIdx])
         } else if (idx < currentIndex) {
             currentIndex = (currentIndex - 1).coerceAtLeast(0)
+            persistQueueState()
+        } else {
+            persistQueueState()
         }
     }
 
@@ -240,6 +298,7 @@ class AetherAudioEngine private constructor(
         currentIndex = -1
         stopPlayback()
         _playerState.update { it.copy(currentTrack = null) }
+        scope.launch(Dispatchers.IO) { queueStorage.clear() }
     }
 
     fun getCurrentQueue(): List<S3AudioTrack> = queue
@@ -289,6 +348,7 @@ class AetherAudioEngine private constructor(
             currentIndex = queue.indexOfFirst { it.key == track.key && it.bucketName == track.bucketName }
         }
         if (currentIndex < 0) currentIndex = 0
+        persistQueueState()
 
         stopCurrent()
 
@@ -436,6 +496,7 @@ class AetherAudioEngine private constructor(
                         telemetry = it.telemetry.copy(leftChannelDb = -60f, rightChannelDb = -60f)
                     )
                 }
+                persistQueueState()
             }
             PlaybackStatus.PAUSED, PlaybackStatus.IDLE -> {
                 requestAudioFocus()
@@ -469,6 +530,7 @@ class AetherAudioEngine private constructor(
             mediaPlayer?.seekTo(target.toInt())
         } catch (_: Exception) {}
         _playerState.update { it.copy(currentPositionMs = target, scrubPositionMs = target) }
+        persistQueueState()
     }
 
     fun setScrubbing(isScrubbing: Boolean, positionMs: Long) {
@@ -532,11 +594,13 @@ class AetherAudioEngine private constructor(
                 telemetry = it.telemetry.copy(leftChannelDb = -60f, rightChannelDb = -60f)
             )
         }
+        persistQueueState()
     }
 
     fun setPlaybackSpeed(speed: Float) {
         _playerState.update { it.copy(playbackSpeed = speed) }
         applySpeed(speed)
+        persistQueueState()
     }
 
     private fun applySpeed(speed: Float) {
@@ -560,6 +624,7 @@ class AetherAudioEngine private constructor(
         try {
             mediaPlayer?.isLooping = (nextMode == LoopMode.SINGLE)
         } catch (_: Exception) {}
+        persistQueueState()
         return nextMode
     }
 
@@ -568,6 +633,7 @@ class AetherAudioEngine private constructor(
         try {
             mediaPlayer?.isLooping = (mode == LoopMode.SINGLE)
         } catch (_: Exception) {}
+        persistQueueState()
     }
 
     fun setAbPointA() {
