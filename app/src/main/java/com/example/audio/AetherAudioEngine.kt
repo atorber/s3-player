@@ -2,8 +2,11 @@ package com.example.audio
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.PlaybackParams
+import android.media.audiofx.Equalizer
 import android.os.Build
 import android.util.Log
 import com.example.data.model.S3AudioTrack
@@ -81,9 +84,42 @@ class AetherAudioEngine(
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
     private var mediaPlayer: MediaPlayer? = null
+    private var equalizer: Equalizer? = null
     private var progressJob: Job? = null
     private var telemetryJob: Job? = null
     private val random = Random()
+
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                // Permanent loss of audio focus
+                if (_playerState.value.status == PlaybackStatus.PLAYING) {
+                    togglePlayPause()
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Pause playback
+                if (_playerState.value.status == PlaybackStatus.PLAYING) {
+                    togglePlayPause()
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Lower volume
+                try {
+                    mediaPlayer?.setVolume(0.2f, 0.2f)
+                } catch (_: Exception) {}
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                // Resume volume or playback
+                try {
+                    mediaPlayer?.setVolume(1.0f, 1.0f)
+                } catch (_: Exception) {}
+            }
+        }
+    }
 
     private val _queueFlow = MutableStateFlow<List<S3AudioTrack>>(emptyList())
     val queueFlow: StateFlow<List<S3AudioTrack>> = _queueFlow.asStateFlow()
@@ -121,7 +157,61 @@ class AetherAudioEngine(
         }
     }
 
+    fun insertNextInQueue(tracks: List<S3AudioTrack>) {
+        val newTracks = tracks.filter { t -> !queue.any { it.key == t.key && it.bucketName == t.bucketName } }
+        if (newTracks.isEmpty()) return
+        val insertIdx = if (currentIndex >= 0 && currentIndex < queue.size) currentIndex + 1 else 0
+        val mutable = queue.toMutableList()
+        mutable.addAll(insertIdx, newTracks)
+        queue = mutable
+        if (_playerState.value.currentTrack == null && queue.isNotEmpty()) {
+            playTrack(queue.first())
+        }
+    }
+
+    fun clearPlayedQueue() {
+        if (currentIndex > 0 && queue.isNotEmpty()) {
+            val remaining = queue.subList(currentIndex, queue.size).toList()
+            queue = remaining
+            currentIndex = 0
+        }
+    }
+
     fun getQueue(): List<S3AudioTrack> = queue
+
+    private fun requestAudioFocus(): Boolean {
+        if (audioManager == null) return true
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val playbackAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(playbackAttributes)
+                .setAcceptsDelayedFocusGain(true)
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+            audioFocusRequest = request
+            audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(
+                audioFocusChangeListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        if (audioManager == null) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(audioFocusChangeListener)
+        }
+    }
 
     fun playTrack(track: S3AudioTrack, newQueue: List<S3AudioTrack>? = null) {
         if (newQueue != null && newQueue.isNotEmpty()) {
@@ -151,6 +241,8 @@ class AetherAudioEngine(
         }
 
         try {
+            requestAudioFocus()
+
             val player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -182,6 +274,18 @@ class AetherAudioEngine(
                         mp.isLooping = (_playerState.value.loopMode == LoopMode.SINGLE)
                     } catch (_: Exception) {}
                     applySpeed(playerState.value.playbackSpeed)
+
+                    // Init audio effects equalizer
+                    try {
+                        equalizer?.release()
+                        equalizer = Equalizer(0, mp.audioSessionId).apply {
+                            enabled = true
+                            applyCurrentEqToNative()
+                        }
+                    } catch (e: Exception) {
+                        Log.w("AetherAudio", "Equalizer init failed: ${e.message}")
+                    }
+
                     mp.start()
                     startProgressTracker()
                     startTelemetryStream()
@@ -193,8 +297,18 @@ class AetherAudioEngine(
 
                 setOnErrorListener { _, what, extra ->
                     Log.w("AetherAudio", "Media error: what=$what, extra=$extra")
-                    // Fall back to synthetic audio playback simulation so UI doesn't freeze if network fails
-                    fallbackToSimulatedPlayback(track)
+                    stopCurrent()
+                    val err = when (what) {
+                        MediaPlayer.MEDIA_ERROR_SERVER_DIED -> "媒体服务异常重启 ($extra)"
+                        MediaPlayer.MEDIA_ERROR_UNKNOWN -> "媒体播放未知错误 ($extra)"
+                        else -> "网络连接或媒体格式解析失败 ($what, $extra)"
+                    }
+                    _playerState.update {
+                        it.copy(
+                            status = PlaybackStatus.ERROR,
+                            errorMessage = err
+                        )
+                    }
                     true
                 }
             }
@@ -204,21 +318,33 @@ class AetherAudioEngine(
 
         } catch (e: Exception) {
             Log.e("AetherAudio", "Error initiating playback: ${e.message}", e)
-            fallbackToSimulatedPlayback(track)
+            stopCurrent()
+            _playerState.update {
+                it.copy(
+                    status = PlaybackStatus.ERROR,
+                    errorMessage = "无法初始化音频流: ${e.message ?: "未知异常"}"
+                )
+            }
         }
     }
 
-    private fun fallbackToSimulatedPlayback(track: S3AudioTrack) {
-        _playerState.update {
-            it.copy(
-                status = PlaybackStatus.PLAYING,
-                durationMs = track.durationMs,
-                bufferPercentage = 100,
-                errorMessage = null
-            )
+    private fun applyCurrentEqToNative() {
+        val eq = equalizer ?: return
+        try {
+            val numBands = eq.numberOfBands.toInt()
+            val minEqLevel = eq.bandLevelRange[0] // in mB (millibels, e.g. -1500)
+            val maxEqLevel = eq.bandLevelRange[1] // in mB (millibels, e.g. 1500)
+            val customBands = _playerState.value.eqCustomBands
+
+            for (i in 0 until minOf(numBands, customBands.size)) {
+                val db = customBands[i]
+                // Convert dB (-12 to +12) to millibels (-1200 to +1200) clamped to hardware limits
+                val mB = (db * 100).toInt().coerceIn(minEqLevel.toInt(), maxEqLevel.toInt()).toShort()
+                eq.setBandLevel(i.toShort(), mB)
+            }
+        } catch (e: Exception) {
+            Log.w("AetherAudio", "Failed to apply EQ bands: ${e.message}")
         }
-        startProgressTracker()
-        startTelemetryStream()
     }
 
     fun togglePlayPause() {
@@ -243,6 +369,7 @@ class AetherAudioEngine(
                 }
             }
             PlaybackStatus.PAUSED, PlaybackStatus.IDLE -> {
+                requestAudioFocus()
                 if (mediaPlayer != null) {
                     try {
                         mediaPlayer?.start()
@@ -325,6 +452,7 @@ class AetherAudioEngine(
 
     fun stopPlayback() {
         stopCurrent()
+        abandonAudioFocus()
         _playerState.update {
             it.copy(
                 status = PlaybackStatus.IDLE,
@@ -391,6 +519,7 @@ class AetherAudioEngine(
                 eqCustomBands = preset.bands
             )
         }
+        applyCurrentEqToNative()
     }
 
     fun setCustomEqBand(index: Int, db: Float) {
@@ -398,6 +527,7 @@ class AetherAudioEngine(
         if (index in bands.indices) {
             bands[index] = db.coerceIn(-12f, 12f)
             _playerState.update { it.copy(eqCustomBands = bands) }
+            applyCurrentEqToNative()
         }
     }
 
@@ -504,6 +634,10 @@ class AetherAudioEngine(
         progressJob?.cancel()
         telemetryJob?.cancel()
         try {
+            equalizer?.release()
+        } catch (_: Exception) {}
+        equalizer = null
+        try {
             mediaPlayer?.stop()
             mediaPlayer?.release()
         } catch (_: Exception) {}
@@ -512,5 +646,6 @@ class AetherAudioEngine(
 
     fun release() {
         stopCurrent()
+        abandonAudioFocus()
     }
 }

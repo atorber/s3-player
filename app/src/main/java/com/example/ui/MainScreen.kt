@@ -54,8 +54,8 @@ import com.example.ui.components.AetherDockPlayer
 import com.example.ui.components.AetherNavBar
 import com.example.ui.components.AetherTopBar
 import com.example.ui.screens.BrowserScreen
+import com.example.ui.screens.ExpandedPlayerScreen
 import com.example.ui.screens.MountBucketDialog
-import com.example.ui.screens.PlayerScreen
 import com.example.ui.screens.PlaylistScreen
 import com.example.ui.screens.SyncSettingsScreen
 import com.example.ui.screens.TelemetryInspectorScreen
@@ -77,7 +77,6 @@ import kotlinx.coroutines.flow.collectLatest
 fun MainScreen(viewModel: AetherViewModel) {
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val navState by viewModel.navState.collectAsStateWithLifecycle()
-    val tracks by viewModel.filteredTracks.collectAsStateWithLifecycle()
     val browserTracks by viewModel.browserTracks.collectAsStateWithLifecycle()
     val browserFolders by viewModel.browserFolders.collectAsStateWithLifecycle()
     val formatCounts by viewModel.formatCounts.collectAsStateWithLifecycle()
@@ -94,15 +93,13 @@ fun MainScreen(viewModel: AetherViewModel) {
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedFormat by viewModel.selectedFormatFilter.collectAsStateWithLifecycle()
     val isRealtimeBannerVisible by viewModel.isRealtimeBannerVisible.collectAsStateWithLifecycle()
+    val realtimeBannerTrack by viewModel.realtimeBannerTrack.collectAsStateWithLifecycle()
     val isRecursiveScan by viewModel.isRecursiveScan.collectAsStateWithLifecycle()
     val directoryTiers by viewModel.directoryTiers.collectAsStateWithLifecycle()
     val syncSettings by viewModel.syncSettings.collectAsStateWithLifecycle()
     val isAutoPlayNewEnabled by viewModel.isAutoPlayNewEnabled.collectAsStateWithLifecycle()
-    val isPitchCorrectionEnabled by viewModel.isPitchCorrectionEnabled.collectAsStateWithLifecycle()
-    val isSilenceTrimmingEnabled by viewModel.isSilenceTrimmingEnabled.collectAsStateWithLifecycle()
 
     var toastMessage by remember { mutableStateOf<String?>(null) }
-    var isObjectKeyDialogVisible by remember { mutableStateOf(false) }
 
     // Collect Toast notifications
     LaunchedEffect(Unit) {
@@ -123,7 +120,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                 activeTab = navState.activeTab,
                 currentUri = "s3://${syncSettings.currentBucketName}${if (syncSettings.basePrefixPath.startsWith("/")) syncSettings.basePrefixPath else if (syncSettings.basePrefixPath.isBlank()) "/" else "/${syncSettings.basePrefixPath}"}",
                 onOpenSyncStatus = { viewModel.setTelemetryInspectorVisible(true) },
-                onProfileClick = { viewModel.setActiveTab(3) },
+                onProfileClick = { viewModel.setActiveTab(2) },
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
             )
         },
@@ -133,18 +130,18 @@ fun MainScreen(viewModel: AetherViewModel) {
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.navigationBars)
             ) {
-                // Persistent Floating Dock Player (visible on tabs other than full player)
-                if (navState.activeTab != 2 && playerState.currentTrack != null) {
+                // Persistent Floating Dock Player
+                if (playerState.currentTrack != null) {
                     AetherDockPlayer(
                         playerState = playerState,
-                        onExpandPlayer = { viewModel.setActiveTab(2) },
+                        onExpandPlayer = { viewModel.setExpandedPlayerVisible(true) },
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onSkipBackward10 = viewModel::skipBackward10s,
                         onSkipForward30 = viewModel::skipForward30s
                     )
                 }
 
-                // 4-Tab Bottom Navigation Bar
+                // 3-Tab Bottom Navigation Bar
                 AetherNavBar(
                     activeTab = navState.activeTab,
                     onTabSelected = viewModel::setActiveTab
@@ -226,47 +223,23 @@ fun MainScreen(viewModel: AetherViewModel) {
                         isBannerVisible = isRealtimeBannerVisible,
                         isAutoPlayNewEnabled = isAutoPlayNewEnabled,
                         monitoredLocation = displayLoc,
+                        bannerTrack = realtimeBannerTrack,
                         onDismissBanner = viewModel::dismissRealtimeBanner,
                         onPlayTrack = viewModel::playTrackFromPlaylist,
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onStopPlayback = viewModel::stopPlayback,
                         onPlayNewArrival = {
-                            val newArrival = playlistQueue.firstOrNull { it.id == 2L } ?: playlistQueue.firstOrNull()
+                            val newArrival = realtimeBannerTrack ?: playlistQueue.firstOrNull()
                             newArrival?.let { viewModel.playTrackFromPlaylist(it) }
                             viewModel.dismissRealtimeBanner()
                         },
                         onToggleAutoPlayNew = viewModel::toggleAutoPlayNew,
                         onToggleRepeat = viewModel::toggleLoopMode,
-                        onClearPlayed = { /* Cleared */ },
+                        onClearPlayed = viewModel::clearPlayedQueue,
                     )
                 }
                 2 -> {
-                    // Screen 3: 正在播放 / 沉浸式播放器 (Player)
-                    PlayerScreen(
-                        playerState = playerState,
-                        fallbackTrack = tracks.firstOrNull(),
-                        isPitchCorrectionEnabled = isPitchCorrectionEnabled,
-                        isSilenceTrimmingEnabled = isSilenceTrimmingEnabled,
-                        onTogglePlayPause = viewModel::togglePlayPause,
-                        onSeekTo = viewModel::seekTo,
-                        onSkipBackward15 = viewModel::skipBackward15s,
-                        onSkipForward30 = viewModel::skipForward30s,
-                        onPlayNext = viewModel::playNext,
-                        onPlayPrevious = viewModel::playPrevious,
-                        onSetPlaybackSpeed = viewModel::setPlaybackSpeed,
-                        onTogglePitchCorrection = viewModel::togglePitchCorrection,
-                        onToggleSilenceTrimming = viewModel::toggleSilenceTrimming,
-                        onInspectObjectKey = { isObjectKeyDialogVisible = true },
-                        onQuickListenNewArrival = {
-                            val arrival = tracks.firstOrNull { it.id == 2L }
-                            arrival?.let { viewModel.playTrackFromPlaylist(it) }
-                        },
-                        onToggleRepeat = viewModel::toggleLoopMode,
-                        onStopPlayback = viewModel::stopPlayback
-                    )
-                }
-                3 -> {
-                    // Screen 4: 同步设置 (Sync Settings)
+                    // Screen 3: 同步设置 (Sync Settings)
                     SyncSettingsScreen(
                         settings = syncSettings,
                         onUpdatePollInterval = viewModel::updatePollInterval,
@@ -275,7 +248,9 @@ fun MainScreen(viewModel: AetherViewModel) {
                         onToggleSubdirMonitoring = viewModel::toggleSubdirMonitoring,
                         onToggleSnsNotification = viewModel::toggleSnsNotification,
                         onToggleFormatEnabled = viewModel::toggleFormatEnabled,
-                        onRunPingTest = { ep, bk -> viewModel.runPingTest(ep, bk) },
+                        onRunPingTest = { ep, bk, reg, ak, sk, tok, ps, ssl, pub ->
+                            viewModel.runPingTest(ep, bk, reg, ak, sk, tok, ps, ssl, pub)
+                        },
                         onClearCache = viewModel::clearCache,
                         onExportM3u8 = viewModel::exportM3u8,
                         onSaveAndRestart = { b, p, ep, reg, ak, sk, tok, ps, ssl, pub ->
@@ -337,60 +312,32 @@ fun MainScreen(viewModel: AetherViewModel) {
                 }
             }
 
-            // S3 Object Key Details Dialog
-            if (isObjectKeyDialogVisible) {
-                AlertDialog(
-                    onDismissRequest = { isObjectKeyDialogVisible = false },
-                    containerColor = SurfaceContainer,
-                    title = {
-                        Text(
-                            text = "S3 对象详细元数据",
-                            fontFamily = FontFamily.SansSerif,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextHighContrast
-                        )
-                    },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "URI: s3://xtrader/podcasts/2025-season/guest_recording_track_02.flac",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                color = AwsAmber
-                            )
-                            Text(
-                                text = "文件大小: 67,108,864 字节 (64.0 MB)",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                color = TextLowContrast
-                            )
-                            Text(
-                                text = "存储类型: INTELLIGENT_TIERING",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                color = TextLowContrast
-                            )
-                            Text(
-                                text = "ETag: \"4d19a008c234a91f421e4d909c29af57\"",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                color = TextLowContrast
-                            )
-                            Text(
-                                text = "服务端: S3 Lambda Transcoder",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                color = TextLowContrast
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { isObjectKeyDialogVisible = false }) {
-                            Text("关闭", color = ElectricCyan, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                )
+            // Expanded Full Player Modal
+            if (navState.isExpandedPlayerVisible && playerState.currentTrack != null) {
+                ModalBottomSheet(
+                    onDismissRequest = { viewModel.setExpandedPlayerVisible(false) },
+                    containerColor = AetherVoid
+                ) {
+                    ExpandedPlayerScreen(
+                        playerState = playerState,
+                        onCollapse = { viewModel.setExpandedPlayerVisible(false) },
+                        onTogglePlayPause = viewModel::togglePlayPause,
+                        onSeekTo = viewModel::seekTo,
+                        onScrub = viewModel::setScrubbing,
+                        onSkipForward10s = viewModel::skipForward10s,
+                        onSkipBackward10s = viewModel::skipBackward10s,
+                        onPlayNext = viewModel::playNext,
+                        onPlayPrevious = viewModel::playPrevious,
+                        onSetPlaybackSpeed = viewModel::setPlaybackSpeed,
+                        onToggleLoopMode = viewModel::toggleLoopMode,
+                        onSetAbPointA = viewModel::setAbPointA,
+                        onSetAbPointB = viewModel::setAbPointB,
+                        onClearAbLoop = viewModel::clearAbLoop,
+                        onOpenTelemetry = { viewModel.setTelemetryInspectorVisible(true) },
+                        onToggleFavorite = { playerState.currentTrack?.let { viewModel.toggleFavorite(it) } },
+                        onToggleCache = { playerState.currentTrack?.let { viewModel.toggleCacheLocally(it) } }
+                    )
+                }
             }
 
             // Standalone Telemetry Inspector Modal

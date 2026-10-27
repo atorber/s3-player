@@ -18,7 +18,7 @@ object SampleData {
             authType = "S3 SigV4 认证",
             usePathStyle = false,
             useSsl = true,
-            accessKey = "YjNmNjhkOWMtODE5My00MjM5LTgxZGYtNWQ3MzFlNDA4NTlm"
+            accessKey = null
         ),
         S3Bucket(
             bucketName = "podcast-vault",

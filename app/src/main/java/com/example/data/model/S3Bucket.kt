@@ -16,5 +16,8 @@ data class S3Bucket(
     val authType: String = "S3 协议 (签名/匿名)",
     val usePathStyle: Boolean = false,
     val useSsl: Boolean = true,
-    val accessKey: String? = null
+    val accessKey: String? = null,
+    val secretKey: String? = null,
+    val sessionToken: String? = null,
+    val basePrefix: String = "/"
 )

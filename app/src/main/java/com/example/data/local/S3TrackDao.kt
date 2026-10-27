@@ -13,6 +13,9 @@ interface S3TrackDao {
     @Query("SELECT * FROM s3_audio_tracks ORDER BY id ASC")
     fun getAllTracks(): Flow<List<S3AudioTrack>>
 
+    @Query("SELECT * FROM s3_audio_tracks ORDER BY id ASC")
+    suspend fun getAllTracksList(): List<S3AudioTrack>
+
     @Query("SELECT * FROM s3_audio_tracks WHERE bucketName = :bucketName ORDER BY key ASC")
     fun getTracksForBucket(bucketName: String): Flow<List<S3AudioTrack>>
 

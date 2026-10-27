@@ -1,9 +1,13 @@
 package com.example.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "s3_audio_tracks")
+@Entity(
+    tableName = "s3_audio_tracks",
+    indices = [Index(value = ["bucketName", "key"], unique = true)]
+)
 data class S3AudioTrack(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val bucketName: String,

@@ -101,6 +101,7 @@ fun PlaylistScreen(
     isBannerVisible: Boolean,
     isAutoPlayNewEnabled: Boolean = true,
     monitoredLocation: String = "s3://xtrader/",
+    bannerTrack: S3AudioTrack? = null,
     onDismissBanner: () -> Unit,
     onPlayTrack: (S3AudioTrack) -> Unit,
     onTogglePlayPause: () -> Unit = {},
@@ -177,7 +178,7 @@ fun PlaylistScreen(
                             }
 
                             Text(
-                                text = "18秒前",
+                                text = bannerTrack?.lastModified ?: "刚刚",
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 10.sp,
                                 color = TextLowContrast
@@ -186,14 +187,14 @@ fun PlaylistScreen(
 
                         Column(modifier = Modifier.padding(start = 14.dp)) {
                             Text(
-                                text = "guest_recording_track_02.flac",
+                                text = bannerTrack?.title ?: "新增音频对象",
                                 fontFamily = FontFamily.SansSerif,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextHighContrast
                             )
                             Text(
-                                text = "已通过 PutObject 事件自动入队至第 2 位",
+                                text = "格式 ${bannerTrack?.format ?: "FLAC"} · 体积 ${bannerTrack?.sizeFormatted ?: "--"} · 存储类型 ${bannerTrack?.storageClass ?: "STANDARD"}",
                                 fontFamily = FontFamily.SansSerif,
                                 fontSize = 11.sp,
                                 color = TextLowContrast
@@ -282,7 +283,7 @@ fun PlaylistScreen(
                             modifier = Modifier.size(15.dp)
                         )
                         Text(
-                            text = "正在从 S3 节点实时推流",
+                            text = if (playerState.status == PlaybackStatus.PLAYING) "正在从 S3 节点实时推流" else "S3 音频流就绪",
                             fontFamily = FontFamily.SansSerif,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -297,7 +298,7 @@ fun PlaylistScreen(
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = "延迟 24ms",
+                            text = "延迟 ${playerState.telemetry.latencyMs}ms",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
                             color = ElectricCyanDim
@@ -353,6 +354,10 @@ fun PlaylistScreen(
 
                             Spacer(modifier = Modifier.width(12.dp))
 
+                            val folderDisplay = currentTrack?.key?.trim()?.removePrefix("/")?.let { k ->
+                                if (k.contains("/")) "📁 " + k.substringBeforeLast("/") + "/" else "📁 根目录"
+                            } ?: "📁 根目录"
+
                             Column {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -373,17 +378,19 @@ fun PlaylistScreen(
                                         )
                                     }
                                     Text(
-                                        text = "📁 ep04-live/",
+                                        text = folderDisplay,
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 10.sp,
-                                        color = TextLowContrast
+                                        color = TextLowContrast,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
 
                                 Spacer(modifier = Modifier.height(2.dp))
 
                                 Text(
-                                    text = currentTrack?.title ?: "ep04_final_master_v2.flac",
+                                    text = currentTrack?.title ?: "暂无可播放曲目",
                                     fontFamily = FontFamily.SansSerif,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
@@ -393,7 +400,7 @@ fun PlaylistScreen(
                                 )
 
                                 Text(
-                                    text = "24bit · 96kHz · 1,411 kbps CBR",
+                                    text = "${currentTrack?.sampleRate ?: "48kHz / 24-bit"} · ${currentTrack?.channels ?: "2.0 Stereo"}",
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 10.sp,
                                     color = ElectricCyanDim
@@ -441,7 +448,11 @@ fun PlaylistScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Waveform Snippet + timestamps
+                    val currentPos = playerState.currentPositionMs
+                    val duration = if (playerState.durationMs > 0) playerState.durationMs else (currentTrack?.durationMs ?: 0L)
+                    val progressRatio = if (duration > 0) (currentPos.toFloat() / duration).coerceIn(0f, 1f) else 0f
+
+                    // Waveform Snippet + dynamic timestamps
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -461,14 +472,15 @@ fun PlaylistScreen(
                                 10.dp, 16.dp, 22.dp, 12.dp, 26.dp, 16.dp, 20.dp, 14.dp,
                                 18.dp, 10.dp, 22.dp, 16.dp, 8.dp, 18.dp, 12.dp
                             )
+                            val playedBarCount = (progressRatio * barHeights.size).toInt()
                             barHeights.forEachIndexed { idx, h ->
-                                val isPlayed = idx <= 12
+                                val isPlayed = idx <= playedBarCount
                                 Box(
                                     modifier = Modifier
                                         .width(3.dp)
                                         .height(h)
                                         .clip(RoundedCornerShape(2.dp))
-                                        .background(if (isPlayed) (if (idx == 12) AwsAmber else ElectricCyan) else SurfaceContainerHighest)
+                                        .background(if (isPlayed) (if (idx == playedBarCount) AwsAmber else ElectricCyan) else SurfaceContainerHighest)
                                 )
                             }
                         }
@@ -480,14 +492,14 @@ fun PlaylistScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "24:18",
+                                text = formatPlaylistMs(currentPos),
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AwsAmber
                             )
                             Text(
-                                text = "48:12",
+                                text = formatPlaylistMs(duration),
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 color = TextLowContrast
@@ -497,7 +509,8 @@ fun PlaylistScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Gain / Boost Quick Control & S3 Buffer
+                    // Dynamic S3 Buffer and latency
+                    val bufferPct = playerState.bufferPercentage.coerceIn(0, 100)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -522,13 +535,13 @@ fun PlaylistScreen(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth(0.88f)
+                                        .fillMaxWidth(bufferPct / 100f)
                                         .height(5.dp)
                                         .background(ElectricCyan)
                                 )
                             }
                             Text(
-                                text = "100%",
+                                text = "$bufferPct%",
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 10.sp,
                                 color = ElectricCyanDim
@@ -540,7 +553,7 @@ fun PlaylistScreen(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "音频增益:",
+                                text = "吞吐量:",
                                 fontFamily = FontFamily.SansSerif,
                                 fontSize = 10.sp,
                                 color = TextLowContrast
@@ -552,7 +565,7 @@ fun PlaylistScreen(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "+1.5 dB",
+                                    text = String.format(java.util.Locale.US, "%.1f MB/s", playerState.telemetry.throughputMBs),
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
@@ -1084,4 +1097,11 @@ fun PlaylistScreen(
             Spacer(modifier = Modifier.height(80.dp)) // clearance for dock & nav
         }
     }
+}
+
+private fun formatPlaylistMs(ms: Long): String {
+    val totalSec = (ms / 1000).coerceAtLeast(0)
+    val minutes = totalSec / 60
+    val seconds = totalSec % 60
+    return String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
 }

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Tune
@@ -51,8 +50,7 @@ fun AetherNavBar(
     val tabs = listOf(
         AetherNavTab(0, "文件浏览", Icons.Default.FolderOpen, "nav_tab_browser"),
         AetherNavTab(1, "播放列表", Icons.Default.QueueMusic, "nav_tab_playlist"),
-        AetherNavTab(2, "播放器", Icons.Default.Album, "nav_tab_player"),
-        AetherNavTab(3, "同步设置", Icons.Default.Tune, "nav_tab_sync")
+        AetherNavTab(2, "同步设置", Icons.Default.Tune, "nav_tab_sync")
     )
 
     Box(

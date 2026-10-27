@@ -106,6 +106,7 @@ fun PlayerScreen(
     onToggleSilenceTrimming: () -> Unit,
     onInspectObjectKey: () -> Unit,
     onQuickListenNewArrival: () -> Unit,
+    onToggleFavorite: (S3AudioTrack) -> Unit = {},
     onToggleRepeat: () -> Unit = {},
     onStopPlayback: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -137,7 +138,7 @@ fun PlayerScreen(
     )
 
     val currentMs = if (playerState.isScrubbing) playerState.scrubPositionMs else playerState.currentPositionMs
-    val totalMs = if (playerState.durationMs > 0) playerState.durationMs else 2892000L // 48:12 default
+    val totalMs = if (playerState.durationMs > 0) playerState.durationMs else (track?.durationMs ?: 2892000L)
     val progressFraction = (currentMs.toFloat() / totalMs).coerceIn(0f, 1f)
 
     val currentMin = (currentMs / 1000) / 60
@@ -163,6 +164,13 @@ fun PlayerScreen(
     ) {
         Spacer(modifier = Modifier.height(2.dp))
 
+        val folderDisplay = track?.key?.trim()?.removePrefix("/")?.let { k ->
+            if (k.contains("/")) "/" + k.substringBeforeLast("/") + "/" else "/"
+        } ?: "/"
+        val etagDisplay = track?.etag?.takeIf { it.isNotBlank() }?.let {
+            if (it.length > 14) "etag:${it.take(8)}...${it.takeLast(3)}" else "etag:$it"
+        } ?: "etag:standard"
+
         // 1. Top Bar Context Badges
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -184,7 +192,7 @@ fun PlayerScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "/podcasts/2025-season/ep04-live/",
+                        text = folderDisplay,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         color = TextHighContrast
@@ -207,7 +215,7 @@ fun PlayerScreen(
                     )
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                        text = "etag:9b2d8...f4a",
+                        text = etagDisplay,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp,
                         color = ElectricCyanDim
@@ -256,7 +264,7 @@ fun PlayerScreen(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "S3 标准存储 · ap-northeast-1",
+                            text = "${track?.storageClass ?: "STANDARD"} · ${playerState.telemetry.s3RegionEdge}",
                             fontFamily = FontFamily.SansSerif,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
@@ -280,7 +288,7 @@ fun PlayerScreen(
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "18ms 边缘延迟",
+                            text = "${playerState.telemetry.latencyMs}ms 边缘延迟",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
@@ -453,18 +461,19 @@ fun PlayerScreen(
                     )
                 }
 
+                val isFav = track?.isFavorite == true
                 Box(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
-                        .background(SurfaceContainer)
-                        .clickable { },
+                        .background(if (isFav) AwsAmber.copy(alpha = 0.2f) else SurfaceContainer)
+                        .clickable { track?.let { onToggleFavorite(it) } },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.BookmarkAdd,
                         contentDescription = "收藏",
-                        tint = TextMediumContrast,
+                        tint = if (isFav) AwsAmber else TextMediumContrast,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -483,7 +492,7 @@ fun PlayerScreen(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "FLAC 96kHz / 24-bit",
+                        text = "${track?.format ?: "FLAC"} ${track?.sampleRate ?: "48kHz / 24-bit"}",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
@@ -498,7 +507,7 @@ fun PlayerScreen(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "无损 1411kbps",
+                        text = track?.channels ?: "2.0 Stereo",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
@@ -513,7 +522,7 @@ fun PlayerScreen(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "bytes=0-1048576",
+                        text = track?.sizeFormatted ?: "--",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp,
                         color = TextLowContrast
@@ -556,6 +565,9 @@ fun PlayerScreen(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            val bufferPct = playerState.bufferPercentage.coerceIn(0, 100)
+            val bufferFraction = bufferPct / 100f
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -572,7 +584,7 @@ fun PlayerScreen(
                             .background(ElectricCyan)
                     )
                     Text(
-                        text = "S3 分块: 68/120 已缓存",
+                        text = "S3 缓冲区: $bufferPct% 已加载",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -581,7 +593,7 @@ fun PlayerScreen(
                 }
 
                 Text(
-                    text = "当前分块 #42",
+                    text = "${playerState.telemetry.throughputMBs} MB/s",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
                     color = TextLowContrast
@@ -625,7 +637,7 @@ fun PlayerScreen(
                     }
                 }
 
-                // S3 Loaded Buffer Segment (68%)
+                // S3 Loaded Buffer Segment
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -635,7 +647,7 @@ fun PlayerScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.68f)
+                            .fillMaxWidth(bufferFraction)
                             .height(6.dp)
                             .background(ElectricCyan.copy(alpha = 0.35f))
                     )

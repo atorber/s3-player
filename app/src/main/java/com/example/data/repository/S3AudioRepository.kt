@@ -25,9 +25,6 @@ class S3AudioRepository(
 
     init {
         externalScope.launch(Dispatchers.IO) {
-            // Clean up any historical dummy / sample tracks to ensure only real data is shown
-            trackDao.clearAllTracks()
-
             // Initialize active bucket configuration if not present
             val existingBuckets = bucketDao.getAllBuckets().first()
             if (existingBuckets.isEmpty()) {
@@ -44,7 +41,7 @@ class S3AudioRepository(
                         authType = "S3 SigV4 认证",
                         usePathStyle = false,
                         useSsl = true,
-                        accessKey = "YjNmNjhkOWMtODE5My00MjM5LTgxZGYtNWQ3MzFlNDA4NTlm"
+                        accessKey = ""
                     )
                 )
             }
@@ -104,9 +101,12 @@ class S3AudioRepository(
         region: String = "cn-north-3",
         accessKeyId: String = "",
         secretAccessKey: String = "",
+        sessionToken: String = "",
+        continuationToken: String? = null,
         usePathStyle: Boolean = false,
         useTls: Boolean = true,
-        isPublicAccess: Boolean = false
+        isPublicAccess: Boolean = false,
+        allowedExtensions: Set<String>? = null
     ): Result<S3ListResult> = withContext(Dispatchers.IO) {
         val result = remoteService.listObjectsV2(
             endpoint = endpoint,
@@ -116,15 +116,31 @@ class S3AudioRepository(
             region = region,
             accessKeyId = accessKeyId,
             secretAccessKey = secretAccessKey,
+            sessionToken = sessionToken,
+            continuationToken = continuationToken,
             usePathStyle = usePathStyle,
             useTls = useTls,
-            isPublicAccess = isPublicAccess
+            isPublicAccess = isPublicAccess,
+            allowedExtensions = allowedExtensions
         )
 
         result.onSuccess { listResult ->
-            // Save real tracks into local database
+            // Save real tracks into local database, preserving local status like favorite and cached
             if (listResult.tracks.isNotEmpty()) {
-                trackDao.insertAll(listResult.tracks)
+                val existingMap = trackDao.getAllTracksList().associateBy { "${it.bucketName}:${it.key}" }
+                val merged = listResult.tracks.map { remoteTrack ->
+                    val existing = existingMap["${remoteTrack.bucketName}:${remoteTrack.key}"]
+                    if (existing != null) {
+                        remoteTrack.copy(
+                            id = existing.id,
+                            isFavorite = existing.isFavorite,
+                            isCachedLocally = existing.isCachedLocally
+                        )
+                    } else {
+                        remoteTrack
+                    }
+                }
+                trackDao.insertAll(merged)
             }
         }
 

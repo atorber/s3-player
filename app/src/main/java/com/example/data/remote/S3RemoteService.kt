@@ -49,9 +49,12 @@ class S3RemoteService(
         region: String = "cn-north-3",
         accessKeyId: String = "",
         secretAccessKey: String = "",
+        sessionToken: String = "",
+        continuationToken: String? = null,
         usePathStyle: Boolean = false,
         useTls: Boolean = true,
-        isPublicAccess: Boolean = false
+        isPublicAccess: Boolean = false,
+        allowedExtensions: Set<String>? = null
     ): Result<S3ListResult> = withContext(Dispatchers.IO) {
         try {
             val cleanEndpoint = endpoint.trim()
@@ -63,43 +66,48 @@ class S3RemoteService(
             val cleanPrefix = prefix.trim().removePrefix("/")
             val scheme = if (useTls) "https" else "http"
 
+            val queryParams = mutableListOf<Pair<String, String>>()
+            if (!continuationToken.isNullOrBlank()) queryParams.add("continuation-token" to continuationToken)
+            if (delimiter.isNotBlank()) queryParams.add("delimiter" to delimiter)
+            queryParams.add("list-type" to "2")
+            if (cleanPrefix.isNotBlank()) queryParams.add("prefix" to cleanPrefix)
+            queryParams.sortBy { it.first }
+
+            val queryString = queryParams.joinToString("&") {
+                "${urlEncode(it.first)}=${urlEncode(it.second)}"
+            }
+
             // Construct Host and URL
             val (host, requestUrl, canonicalUri) = if (usePathStyle) {
                 val h = cleanEndpoint
-                val url = "$scheme://$h/$cleanBucket/?list-type=2" +
-                        (if (cleanPrefix.isNotBlank()) "&prefix=${urlEncode(cleanPrefix)}" else "") +
-                        (if (delimiter.isNotBlank()) "&delimiter=${urlEncode(delimiter)}" else "")
-                Triple(h, url, "/$cleanBucket/")
+                val uri = "/$cleanBucket/"
+                Triple(h, "$scheme://$h$uri?$queryString", uri)
             } else {
                 val h = if (cleanEndpoint.startsWith("$cleanBucket.")) cleanEndpoint else "$cleanBucket.$cleanEndpoint"
-                val url = "$scheme://$h/?list-type=2" +
-                        (if (cleanPrefix.isNotBlank()) "&prefix=${urlEncode(cleanPrefix)}" else "") +
-                        (if (delimiter.isNotBlank()) "&delimiter=${urlEncode(delimiter)}" else "")
-                Triple(h, url, "/")
+                val uri = "/"
+                Triple(h, "$scheme://$h$uri?$queryString", uri)
             }
 
             val requestBuilder = Request.Builder().url(requestUrl)
 
             // SigV4 Authentication if credentials provided and not public access
             if (!isPublicAccess && accessKeyId.isNotBlank() && secretAccessKey.isNotBlank()) {
-                val queryParams = mutableListOf<Pair<String, String>>()
-                if (delimiter.isNotBlank()) queryParams.add("delimiter" to delimiter)
-                queryParams.add("list-type" to "2")
-                if (cleanPrefix.isNotBlank()) queryParams.add("prefix" to cleanPrefix)
-                queryParams.sortBy { it.first }
-
-                val canonicalQueryString = queryParams.joinToString("&") {
-                    "${urlEncode(it.first)}=${urlEncode(it.second)}"
-                }
-
                 val amzDate = getAmzDate()
                 val dateStamp = getDateStamp()
 
-                val canonicalHeaders = "host:$host\nx-amz-content-sha256:UNSIGNED-PAYLOAD\nx-amz-date:$amzDate\n"
-                val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+                val headerMap = sortedMapOf<String, String>()
+                headerMap["host"] = host
+                headerMap["x-amz-content-sha256"] = "UNSIGNED-PAYLOAD"
+                headerMap["x-amz-date"] = amzDate
+                if (sessionToken.isNotBlank()) {
+                    headerMap["x-amz-security-token"] = sessionToken
+                }
+
+                val canonicalHeaders = headerMap.entries.joinToString("") { "${it.key}:${it.value}\n" }
+                val signedHeaders = headerMap.keys.joinToString(";")
                 val payloadHash = "UNSIGNED-PAYLOAD"
 
-                val canonicalRequest = "GET\n$canonicalUri\n$canonicalQueryString\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+                val canonicalRequest = "GET\n$canonicalUri\n$queryString\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
                 val canonicalRequestHash = sha256Hex(canonicalRequest)
 
                 val algorithm = "AWS4-HMAC-SHA256"
@@ -114,6 +122,9 @@ class S3RemoteService(
                 requestBuilder.header("Host", host)
                 requestBuilder.header("x-amz-date", amzDate)
                 requestBuilder.header("x-amz-content-sha256", payloadHash)
+                if (sessionToken.isNotBlank()) {
+                    requestBuilder.header("x-amz-security-token", sessionToken)
+                }
                 requestBuilder.header("Authorization", authHeader)
             }
 
@@ -137,12 +148,27 @@ class S3RemoteService(
                 region = region,
                 accessKeyId = accessKeyId,
                 secretAccessKey = secretAccessKey,
-                isPublicAccess = isPublicAccess
+                sessionToken = sessionToken,
+                isPublicAccess = isPublicAccess,
+                allowedExtensions = allowedExtensions
             )
             Result.success(result)
         } catch (e: Exception) {
             Log.e("S3RemoteService", "Error listing S3 objects", e)
             Result.failure(e)
+        }
+    }
+        }
+    }
+
+    /**
+     * Encodes a URI path segment by segment so that '/' is preserved
+     * while special characters, spaces, and non-ASCII chars are properly URL-encoded.
+     */
+    fun encodeUriPath(rawPath: String): String {
+        val segments = rawPath.split("/")
+        return segments.joinToString("/") { segment ->
+            if (segment.isEmpty()) "" else urlEncode(segment)
         }
     }
 
@@ -158,12 +184,15 @@ class S3RemoteService(
         region: String,
         accessKeyId: String,
         secretAccessKey: String,
-        isPublicAccess: Boolean
+        sessionToken: String = "",
+        isPublicAccess: Boolean = false,
+        allowedExtensions: Set<String>? = null
     ): S3ListResult {
         val tracks = mutableListOf<S3AudioTrack>()
         val commonPrefixes = mutableListOf<String>()
         var isTruncated = false
         var nextContinuationToken: String? = null
+        val activeExtensions = allowedExtensions ?: audioExtensions
 
         val parser = Xml.newPullParser()
         parser.setInput(StringReader(xml))
@@ -231,7 +260,7 @@ class S3RemoteService(
                             inContents = false
                             if (currentKey.isNotBlank() && !currentKey.endsWith("/")) {
                                 val ext = currentKey.substringAfterLast('.', "").lowercase()
-                                if (ext in audioExtensions) {
+                                if (ext in activeExtensions) {
                                     val fileName = currentKey.substringAfterLast('/')
                                     val streamUrl = buildPlayableStreamUrl(
                                         bucketName = bucketName,
@@ -242,6 +271,7 @@ class S3RemoteService(
                                         region = region,
                                         accessKeyId = accessKeyId,
                                         secretAccessKey = secretAccessKey,
+                                        sessionToken = sessionToken,
                                         isPublicAccess = isPublicAccess
                                     )
 
@@ -302,15 +332,17 @@ class S3RemoteService(
         region: String,
         accessKeyId: String,
         secretAccessKey: String,
-        isPublicAccess: Boolean
+        sessionToken: String = "",
+        isPublicAccess: Boolean = false
     ): String {
         val cleanEndpoint = endpoint.trim().removePrefix("https://").removePrefix("http://").trimEnd('/')
         val scheme = if (useTls) "https" else "http"
         val host = if (usePathStyle) cleanEndpoint else (if (cleanEndpoint.startsWith("$bucketName.")) cleanEndpoint else "$bucketName.$cleanEndpoint")
-        val path = if (usePathStyle) "/$bucketName/$key" else "/$key"
+        val rawPath = if (usePathStyle) "/$bucketName/$key" else "/$key"
+        val encodedPath = encodeUriPath(rawPath)
 
         if (isPublicAccess || accessKeyId.isBlank() || secretAccessKey.isBlank()) {
-            return "$scheme://$host$path"
+            return "$scheme://$host$encodedPath"
         }
 
         // Generate SigV4 Presigned URL valid for 24 hours (86400 seconds)
@@ -327,6 +359,9 @@ class S3RemoteService(
                 "X-Amz-Expires" to expires,
                 "X-Amz-SignedHeaders" to "host"
             )
+            if (sessionToken.isNotBlank()) {
+                queryParams.add("X-Amz-Security-Token" to sessionToken)
+            }
             queryParams.sortBy { it.first }
 
             val canonicalQuery = queryParams.joinToString("&") {
@@ -337,15 +372,15 @@ class S3RemoteService(
             val signedHeaders = "host"
             val payloadHash = "UNSIGNED-PAYLOAD"
 
-            val canonicalRequest = "GET\n$path\n$canonicalQuery\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "GET\n$encodedPath\n$canonicalQuery\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
             val stringToSign = "AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n${sha256Hex(canonicalRequest)}"
 
             val signingKey = getSignatureKey(secretAccessKey, dateStamp, region, "s3")
             val signature = hmacSha256Hex(signingKey, stringToSign)
 
-            "$scheme://$host$path?$canonicalQuery&X-Amz-Signature=$signature"
+            "$scheme://$host$encodedPath?$canonicalQuery&X-Amz-Signature=$signature"
         } catch (e: Exception) {
-            "$scheme://$host$path"
+            "$scheme://$host$encodedPath"
         }
     }
 

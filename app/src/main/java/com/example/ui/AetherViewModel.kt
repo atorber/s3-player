@@ -6,11 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.audio.AetherAudioEngine
 import com.example.audio.EqPreset
 import com.example.audio.LoopMode
+import com.example.audio.PlaybackStatus
 import com.example.audio.PlayerState
 import com.example.data.local.AetherDatabase
 import com.example.data.model.S3AudioTrack
 import com.example.data.model.S3Bucket
 import com.example.data.repository.S3AudioRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,13 +26,15 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class UiNavigationState(
     val isExpandedPlayerVisible: Boolean = false,
     val isTelemetryInspectorVisible: Boolean = false,
     val isMountBucketDialogVisible: Boolean = false,
-    val activeTab: Int = 0 // 0: 文件浏览, 1: 播放列表, 2: 播放器, 3: 同步设置
+    val activeTab: Int = 0 // 0: 文件浏览, 1: 播放列表, 2: 同步设置
 )
 
 enum class TrackSortMode(val label: String) {
@@ -68,7 +73,7 @@ data class SyncSettingsState(
     val basePrefixPath: String = "/",
     val endpoint: String = "xtrader.oss.cn-north-3.inspurcloudoss.com",
     val region: String = "cn-north-3",
-    val accessKeyId: String = "YjNmNjhkOWMtODE5My00MjM5LTgxZGYtNWQ3MzFlNDA4NTlm",
+    val accessKeyId: String = "",
     val secretAccessKey: String = "",
     val sessionToken: String = "",
     val usePathStyle: Boolean = false,
@@ -108,7 +113,10 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     private val _navState = MutableStateFlow(UiNavigationState())
     val navState: StateFlow<UiNavigationState> = _navState.asStateFlow()
 
-    // Realtime banner in playlist (disabled mock banner)
+    // Realtime banner in playlist
+    private val _realtimeBannerTrack = MutableStateFlow<S3AudioTrack?>(null)
+    val realtimeBannerTrack: StateFlow<S3AudioTrack?> = _realtimeBannerTrack.asStateFlow()
+
     private val _isRealtimeBannerVisible = MutableStateFlow(false)
     val isRealtimeBannerVisible: StateFlow<Boolean> = _isRealtimeBannerVisible.asStateFlow()
 
@@ -433,15 +441,40 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     init {
+        viewModelScope.launch {
+            // Restore configured bucket settings from database if available
+            val buckets = repository.allBuckets.first()
+            val first = buckets.firstOrNull()
+            if (first != null) {
+                _syncSettings.update {
+                    it.copy(
+                        currentBucketName = first.bucketName,
+                        endpoint = first.endpoint,
+                        region = first.region,
+                        accessKeyId = first.accessKey ?: "",
+                        secretAccessKey = first.secretKey ?: "",
+                        sessionToken = first.sessionToken ?: "",
+                        usePathStyle = first.usePathStyle,
+                        isTlsEncrypted = first.useSsl,
+                        isPublicAccess = first.accessKey.isNullOrBlank(),
+                        basePrefixPath = first.basePrefix
+                    )
+                }
+                _selectedBucketName.value = first.bucketName
+                val initialPrefix = first.basePrefix.trim().removePrefix("/").removeSuffix("/")
+                val startPrefix = if (initialPrefix.isBlank()) "" else "$initialPrefix/"
+                _currentPrefix.value = startPrefix
+                scanRealS3(startPrefix)
+            } else {
+                val initialPrefix = _syncSettings.value.basePrefixPath.trim().removePrefix("/").removeSuffix("/")
+                val startPrefix = if (initialPrefix.isBlank()) "" else "$initialPrefix/"
+                _currentPrefix.value = startPrefix
+                scanRealS3(startPrefix)
+            }
 
-        // Trigger initial real S3 sync from configured bucket and base prefix
-        val initialPrefix = _syncSettings.value.basePrefixPath.trim().removePrefix("/").removeSuffix("/")
-        val startPrefix = if (initialPrefix.isBlank()) "" else "$initialPrefix/"
-        _currentPrefix.value = startPrefix
-        scanRealS3(startPrefix)
-
-        // Start background polling for new audio files
-        startPeriodicPolling()
+            // Start background polling for new audio files
+            startPeriodicPolling()
+        }
     }
 
     fun selectBucket(bucketName: String?) {
@@ -626,22 +659,30 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun runPingTest(
         endpoint: String = _syncSettings.value.endpoint,
-        bucketName: String = _syncSettings.value.currentBucketName
+        bucketName: String = _syncSettings.value.currentBucketName,
+        region: String = _syncSettings.value.region,
+        accessKeyId: String = _syncSettings.value.accessKeyId,
+        secretAccessKey: String = _syncSettings.value.secretAccessKey,
+        sessionToken: String = _syncSettings.value.sessionToken,
+        usePathStyle: Boolean = _syncSettings.value.usePathStyle,
+        isTlsEncrypted: Boolean = _syncSettings.value.isTlsEncrypted,
+        isPublicAccess: Boolean = _syncSettings.value.isPublicAccess
     ) {
         viewModelScope.launch {
             _syncSettings.update { it.copy(isPinging = true) }
             val startTime = System.currentTimeMillis()
             val result = repository.remoteService.listObjectsV2(
-                endpoint = endpoint,
-                bucketName = bucketName,
+                endpoint = endpoint.trim(),
+                bucketName = bucketName.trim(),
                 prefix = "",
                 delimiter = "/",
-                region = _syncSettings.value.region,
-                accessKeyId = _syncSettings.value.accessKeyId,
-                secretAccessKey = _syncSettings.value.secretAccessKey,
-                usePathStyle = _syncSettings.value.usePathStyle,
-                useTls = _syncSettings.value.isTlsEncrypted,
-                isPublicAccess = _syncSettings.value.isPublicAccess
+                region = region.trim().ifBlank { "cn-north-3" },
+                accessKeyId = accessKeyId.trim(),
+                secretAccessKey = secretAccessKey.trim(),
+                sessionToken = sessionToken.trim(),
+                usePathStyle = usePathStyle,
+                useTls = isTlsEncrypted,
+                isPublicAccess = isPublicAccess
             )
             val latency = System.currentTimeMillis() - startTime
             _syncSettings.update { it.copy(isPinging = false) }
@@ -716,7 +757,10 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 authType = authDesc,
                 usePathStyle = usePathStyle,
                 useSsl = isTlsEncrypted,
-                accessKey = if (isPublicAccess) null else accessKeyId.takeIf { it.isNotBlank() }
+                accessKey = if (isPublicAccess) null else accessKeyId.takeIf { it.isNotBlank() },
+                secretKey = if (isPublicAccess) null else secretAccessKey.takeIf { it.isNotBlank() },
+                sessionToken = if (isPublicAccess) null else sessionToken.takeIf { it.isNotBlank() },
+                basePrefix = cleanPrefix
             )
             repository.addBucket(bucket)
             _selectedBucketName.value = cleanBucket
@@ -843,11 +887,30 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun clearPlayedQueue() {
+        audioEngine.clearPlayedQueue()
+        viewModelScope.launch {
+            _toastEvent.emit("已清空已播放队列")
+        }
+    }
+
+    fun enqueueTrackNext(track: S3AudioTrack) {
+        audioEngine.insertNextInQueue(listOf(track))
+        viewModelScope.launch {
+            _toastEvent.emit("已将「${track.title}」插队为下一首播放")
+        }
+    }
+
     private fun startPeriodicPolling() {
         periodicPollingJob?.cancel()
         periodicPollingJob = viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
-                val intervalSec = _syncSettings.value.pollIntervalSec.coerceAtLeast(2)
+                val settings = _syncSettings.value
+                if (!settings.isSubdirMonitoring) {
+                    delay(3000L)
+                    continue
+                }
+                val intervalSec = settings.pollIntervalSec.coerceAtLeast(2)
                 delay(intervalSec * 1000L)
                 pollRealS3AndAutoEnqueue()
             }
@@ -859,7 +922,8 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
         val cleanTargetPrefix = activePlaylistPath.value.removePrefix("/")
 
-        val knownTrackKeys = repository.allTracks.value.map { it.key }.toSet()
+        val knownTrackKeys = repository.allTracks.first().map { it.key }.toSet()
+        val allowedExts = settings.enabledFormats.map { it.removePrefix(".").lowercase() }.toSet()
 
         val result = repository.syncRemoteS3(
             endpoint = settings.endpoint,
@@ -869,9 +933,11 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             region = settings.region,
             accessKeyId = settings.accessKeyId,
             secretAccessKey = settings.secretAccessKey,
+            sessionToken = settings.sessionToken,
             usePathStyle = settings.usePathStyle,
             useTls = settings.isTlsEncrypted,
-            isPublicAccess = settings.isPublicAccess
+            isPublicAccess = settings.isPublicAccess,
+            allowedExtensions = allowedExts
         )
 
         result.onSuccess { listResult ->
@@ -891,14 +957,21 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 _realtimeBannerTrack.value = newTracks.first()
                 _isRealtimeBannerVisible.value = true
 
-                if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
-                    val trackToPlay = newTracks.last()
-                    withContext(Dispatchers.Main) {
+                // Auto-enqueue rule
+                withContext(Dispatchers.Main) {
+                    when (settings.enqueueRule) {
+                        "append" -> audioEngine.addAllToQueue(newTracks)
+                        "upnext" -> audioEngine.insertNextInQueue(newTracks)
+                        "ask" -> { /* real-time banner shown */ }
+                    }
+
+                    if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
+                        val trackToPlay = newTracks.first()
                         playTrackFromPlaylist(trackToPlay)
                         _toastEvent.emit("检测到新音频，自动播放：${trackToPlay.title}")
+                    } else {
+                        _toastEvent.emit("扫描到 ${newTracks.size} 个新音频已加入列表")
                     }
-                } else {
-                    _toastEvent.emit("扫描到 ${newTracks.size} 个新音频已加入列表")
                 }
             }
         }
@@ -911,7 +984,8 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
             val cleanTargetPrefix = if (targetPrefix == "/") "" else targetPrefix.removePrefix("/")
 
-            val knownTrackKeys = repository.allTracks.value.map { it.key }.toSet()
+            val knownTrackKeys = repository.allTracks.first().map { it.key }.toSet()
+            val allowedExts = settings.enabledFormats.map { it.removePrefix(".").lowercase() }.toSet()
 
             val result = repository.syncRemoteS3(
                 endpoint = settings.endpoint,
@@ -921,9 +995,11 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 region = settings.region,
                 accessKeyId = settings.accessKeyId,
                 secretAccessKey = settings.secretAccessKey,
+                sessionToken = settings.sessionToken,
                 usePathStyle = settings.usePathStyle,
                 useTls = settings.isTlsEncrypted,
-                isPublicAccess = settings.isPublicAccess
+                isPublicAccess = settings.isPublicAccess,
+                allowedExtensions = allowedExts
             )
 
             _isScanning.value = false
@@ -947,11 +1023,19 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                     _realtimeBannerTrack.value = newTracks.first()
                     _isRealtimeBannerVisible.value = true
 
-                    if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
-                        val trackToPlay = newTracks.last()
-                        playTrackFromPlaylist(trackToPlay)
-                        _toastEvent.emit("扫描到新音频，已自动播放：${trackToPlay.title}")
-                        return@launch
+                    withContext(Dispatchers.Main) {
+                        when (settings.enqueueRule) {
+                            "append" -> audioEngine.addAllToQueue(newTracks)
+                            "upnext" -> audioEngine.insertNextInQueue(newTracks)
+                            "ask" -> { /* banner */ }
+                        }
+
+                        if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
+                            val trackToPlay = newTracks.first()
+                            playTrackFromPlaylist(trackToPlay)
+                            _toastEvent.emit("扫描到新音频，已自动播放：${trackToPlay.title}")
+                            return@withContext
+                        }
                     }
                 }
 
