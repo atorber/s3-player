@@ -33,7 +33,7 @@ jobs:
             cp .env.example .env || touch .env
           fi
 
-      - name: Decode Keystore
+      - name: Decode Keystore or Generate Fallback
         env:
           ENCODED_STRING: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
@@ -41,7 +41,16 @@ jobs:
             echo "$ENCODED_STRING" | base64 --decode > my-upload-key.jks
             echo "Keystore decoded successfully."
           else
-            echo "KEYSTORE_BASE64 secret is missing. Fallback to debug signing config."
+            echo "KEYSTORE_BASE64 secret is missing. Generating fallback debug.keystore..."
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
       - name: Build Release APK

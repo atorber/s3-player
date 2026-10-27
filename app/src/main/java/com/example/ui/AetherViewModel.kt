@@ -94,6 +94,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     private val db = AetherDatabase.getInstance(application)
     private val repository = S3AudioRepository(db.trackDao(), db.bucketDao(), viewModelScope)
+    private val preferences = com.example.data.local.AetherPreferences(application)
     val audioEngine = AetherAudioEngine(application, viewModelScope)
 
     val playerState: StateFlow<PlayerState> = audioEngine.playerState
@@ -101,7 +102,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     val allBuckets: StateFlow<List<S3Bucket>> = repository.allBuckets
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _selectedBucketName = MutableStateFlow<String?>("xtrader")
+    private val _selectedBucketName = MutableStateFlow<String?>(preferences.currentBucketName)
     val selectedBucketName: StateFlow<String?> = _selectedBucketName.asStateFlow()
 
     private val _selectedFormatFilter = MutableStateFlow<String?>("ALL")
@@ -124,14 +125,18 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     private val _isRecursiveScan = MutableStateFlow(false)
     val isRecursiveScan: StateFlow<Boolean> = _isRecursiveScan.asStateFlow()
 
-    // File Browser Navigation & Organization (starts at root "" for level-by-level exploration)
-    private val _currentPrefix = MutableStateFlow("")
+    // File Browser Navigation & Organization (starts at base prefix for level-by-level exploration)
+    private val _currentPrefix = MutableStateFlow(
+        preferences.basePrefixPath.trim().removePrefix("/").let { if (it.isBlank()) "" else "$it/" }
+    )
     val currentPrefix: StateFlow<String> = _currentPrefix.asStateFlow()
 
-    private val _sortMode = MutableStateFlow(TrackSortMode.NAME_ASC)
+    private val _sortMode = MutableStateFlow(
+        try { TrackSortMode.valueOf(preferences.sortModeName) } catch (_: Exception) { TrackSortMode.NAME_ASC }
+    )
     val sortMode: StateFlow<TrackSortMode> = _sortMode.asStateFlow()
 
-    private val _isGridView = MutableStateFlow(false)
+    private val _isGridView = MutableStateFlow(preferences.isGridView)
     val isGridView: StateFlow<Boolean> = _isGridView.asStateFlow()
 
     private val _isSelectionMode = MutableStateFlow(false)
@@ -381,18 +386,36 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Sync settings state
-    private val _syncSettings = MutableStateFlow(SyncSettingsState())
+    private val _syncSettings = MutableStateFlow(
+        SyncSettingsState(
+            currentBucketName = preferences.currentBucketName,
+            basePrefixPath = preferences.basePrefixPath,
+            endpoint = preferences.endpoint,
+            region = preferences.region,
+            accessKeyId = preferences.accessKeyId,
+            secretAccessKey = preferences.secretAccessKey,
+            sessionToken = preferences.sessionToken,
+            usePathStyle = preferences.usePathStyle,
+            isTlsEncrypted = preferences.isTlsEncrypted,
+            isPublicAccess = preferences.isPublicAccess,
+            isSubdirMonitoring = preferences.isSubdirMonitoring,
+            pollIntervalSec = preferences.pollIntervalSec,
+            isSnsNotification = preferences.isSnsNotification,
+            enqueueRule = preferences.enqueueRule,
+            enabledFormats = preferences.enabledFormats
+        )
+    )
     val syncSettings: StateFlow<SyncSettingsState> = _syncSettings.asStateFlow()
 
     // Audio sound processing tweaks
-    private val _isPitchCorrectionEnabled = MutableStateFlow(true)
+    private val _isPitchCorrectionEnabled = MutableStateFlow(preferences.isPitchCorrectionEnabled)
     val isPitchCorrectionEnabled: StateFlow<Boolean> = _isPitchCorrectionEnabled.asStateFlow()
 
-    private val _isSilenceTrimmingEnabled = MutableStateFlow(false)
+    private val _isSilenceTrimmingEnabled = MutableStateFlow(preferences.isSilenceTrimmingEnabled)
     val isSilenceTrimmingEnabled: StateFlow<Boolean> = _isSilenceTrimmingEnabled.asStateFlow()
 
     // Auto-play state when new tracks are scanned and added
-    private val _isAutoPlayNewEnabled = MutableStateFlow(true)
+    private val _isAutoPlayNewEnabled = MutableStateFlow(preferences.isAutoPlayNewEnabled)
     val isAutoPlayNewEnabled: StateFlow<Boolean> = _isAutoPlayNewEnabled.asStateFlow()
 
     private var periodicPollingJob: Job? = null
@@ -444,24 +467,26 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             // Restore configured bucket settings from database if available
             val buckets = repository.allBuckets.first()
-            val first = buckets.firstOrNull()
-            if (first != null) {
+            val savedBucketName = preferences.currentBucketName
+            val matching = buckets.firstOrNull { it.bucketName.equals(savedBucketName, ignoreCase = true) } ?: buckets.firstOrNull()
+            if (matching != null) {
                 _syncSettings.update {
                     it.copy(
-                        currentBucketName = first.bucketName,
-                        endpoint = first.endpoint,
-                        region = first.region,
-                        accessKeyId = first.accessKey ?: "",
-                        secretAccessKey = first.secretKey ?: "",
-                        sessionToken = first.sessionToken ?: "",
-                        usePathStyle = first.usePathStyle,
-                        isTlsEncrypted = first.useSsl,
-                        isPublicAccess = first.accessKey.isNullOrBlank(),
-                        basePrefixPath = first.basePrefix
+                        currentBucketName = matching.bucketName,
+                        endpoint = matching.endpoint,
+                        region = matching.region,
+                        accessKeyId = matching.accessKey ?: "",
+                        secretAccessKey = matching.secretKey ?: "",
+                        sessionToken = matching.sessionToken ?: "",
+                        usePathStyle = matching.usePathStyle,
+                        isTlsEncrypted = matching.useSsl,
+                        isPublicAccess = matching.accessKey.isNullOrBlank(),
+                        basePrefixPath = matching.basePrefix
                     )
                 }
-                _selectedBucketName.value = first.bucketName
-                val initialPrefix = first.basePrefix.trim().removePrefix("/").removeSuffix("/")
+                _selectedBucketName.value = matching.bucketName
+                preferences.currentBucketName = matching.bucketName
+                val initialPrefix = matching.basePrefix.trim().removePrefix("/").removeSuffix("/")
                 val startPrefix = if (initialPrefix.isBlank()) "" else "$initialPrefix/"
                 _currentPrefix.value = startPrefix
                 scanRealS3(startPrefix)
@@ -479,6 +504,9 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun selectBucket(bucketName: String?) {
         _selectedBucketName.value = bucketName
+        if (!bucketName.isNullOrBlank() && bucketName != "ALL") {
+            preferences.currentBucketName = bucketName
+        }
     }
 
     fun setFormatFilter(format: String?) {
@@ -514,11 +542,15 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun togglePitchCorrection() {
-        _isPitchCorrectionEnabled.update { !it }
+        val next = !_isPitchCorrectionEnabled.value
+        _isPitchCorrectionEnabled.value = next
+        preferences.isPitchCorrectionEnabled = next
     }
 
     fun toggleSilenceTrimming() {
-        _isSilenceTrimmingEnabled.update { !it }
+        val next = !_isSilenceTrimmingEnabled.value
+        _isSilenceTrimmingEnabled.value = next
+        preferences.isSilenceTrimmingEnabled = next
     }
 
     fun playTrackFromBrowser(track: S3AudioTrack) {
@@ -572,6 +604,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     fun toggleAutoPlayNew() {
         val next = !_isAutoPlayNewEnabled.value
         _isAutoPlayNewEnabled.value = next
+        preferences.isAutoPlayNewEnabled = next
         viewModelScope.launch {
             _toastEvent.emit(if (next) "自动播放已开启：扫描到新音频将自动加入并播放" else "自动播放已关闭")
         }
@@ -630,29 +663,44 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     // Sync Settings Interactions
     fun updatePollInterval(sec: Int) {
         _syncSettings.update { it.copy(pollIntervalSec = sec) }
+        preferences.pollIntervalSec = sec
         startPeriodicPolling()
     }
 
     fun setEnqueueRule(rule: String) {
         _syncSettings.update { it.copy(enqueueRule = rule) }
+        preferences.enqueueRule = rule
     }
 
     fun togglePublicAccess() {
-        _syncSettings.update { it.copy(isPublicAccess = !it.isPublicAccess) }
+        _syncSettings.update {
+            val next = !it.isPublicAccess
+            preferences.isPublicAccess = next
+            it.copy(isPublicAccess = next)
+        }
     }
 
     fun toggleSubdirMonitoring() {
-        _syncSettings.update { it.copy(isSubdirMonitoring = !it.isSubdirMonitoring) }
+        _syncSettings.update {
+            val next = !it.isSubdirMonitoring
+            preferences.isSubdirMonitoring = next
+            it.copy(isSubdirMonitoring = next)
+        }
     }
 
     fun toggleSnsNotification() {
-        _syncSettings.update { it.copy(isSnsNotification = !it.isSnsNotification) }
+        _syncSettings.update {
+            val next = !it.isSnsNotification
+            preferences.isSnsNotification = next
+            it.copy(isSnsNotification = next)
+        }
     }
 
     fun toggleFormatEnabled(format: String) {
         _syncSettings.update {
             val updated = it.enabledFormats.toMutableSet()
             if (updated.contains(format)) updated.remove(format) else updated.add(format)
+            preferences.enabledFormats = updated
             it.copy(enabledFormats = updated)
         }
     }
@@ -741,6 +789,18 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val cleanBucket = bucketName.trim().ifBlank { "xtrader" }
             val cleanPrefix = if (prefix.isNotBlank() && !prefix.startsWith("/")) "/${prefix.trim()}" else prefix.trim()
             val authDesc = if (isPublicAccess) "匿名 / 公开访问" else "S3 SigV4 认证"
+
+            // Persist to SharedPreferences so configuration survives upgrades
+            preferences.currentBucketName = cleanBucket
+            preferences.basePrefixPath = cleanPrefix
+            preferences.endpoint = cleanEndpoint
+            preferences.region = region.trim().ifBlank { "cn-north-3" }
+            preferences.accessKeyId = accessKeyId.trim()
+            preferences.secretAccessKey = secretAccessKey.trim()
+            preferences.sessionToken = sessionToken.trim()
+            preferences.usePathStyle = usePathStyle
+            preferences.isTlsEncrypted = isTlsEncrypted
+            preferences.isPublicAccess = isPublicAccess
 
             // Clear previous bucket tracks from local DB so only the newly configured bucket's real data exists
             repository.clearAllTracks()
@@ -1118,10 +1178,15 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setSortMode(mode: TrackSortMode) {
         _sortMode.value = mode
+        preferences.sortModeName = mode.name
     }
 
     fun toggleGridView() {
-        _isGridView.update { !it }
+        _isGridView.update { current ->
+            val next = !current
+            preferences.isGridView = next
+            next
+        }
     }
 
     fun toggleSelectionMode() {
