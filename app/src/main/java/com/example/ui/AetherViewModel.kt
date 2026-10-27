@@ -950,7 +950,21 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     fun clearPlayedQueue() {
         audioEngine.clearPlayedQueue()
         viewModelScope.launch {
-            _toastEvent.emit("已清空已播放队列")
+            _toastEvent.emit("已清理已播完曲目")
+        }
+    }
+
+    fun removeFromQueue(track: S3AudioTrack) {
+        audioEngine.removeFromQueue(track)
+        viewModelScope.launch {
+            _toastEvent.emit("已从播放队列移除: ${track.title}")
+        }
+    }
+
+    fun clearAllQueue() {
+        audioEngine.clearQueue()
+        viewModelScope.launch {
+            _toastEvent.emit("已清空播放队列")
         }
     }
 

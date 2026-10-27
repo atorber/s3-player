@@ -215,6 +215,32 @@ class AetherAudioEngine private constructor(
         }
     }
 
+    fun removeFromQueue(track: S3AudioTrack) {
+        val idx = queue.indexOfFirst { it.key == track.key && it.bucketName == track.bucketName }
+        if (idx < 0) return
+        val isRemovingCurrent = idx == currentIndex
+        val updated = queue.toMutableList().apply { removeAt(idx) }
+        queue = updated
+        if (updated.isEmpty()) {
+            currentIndex = -1
+            stopPlayback()
+            _playerState.update { it.copy(currentTrack = null) }
+        } else if (isRemovingCurrent) {
+            val nextIdx = idx.coerceAtMost(updated.lastIndex)
+            currentIndex = nextIdx
+            playTrack(updated[nextIdx])
+        } else if (idx < currentIndex) {
+            currentIndex = (currentIndex - 1).coerceAtLeast(0)
+        }
+    }
+
+    fun clearQueue() {
+        queue = emptyList()
+        currentIndex = -1
+        stopPlayback()
+        _playerState.update { it.copy(currentTrack = null) }
+    }
+
     fun getCurrentQueue(): List<S3AudioTrack> = queue
 
     private fun requestAudioFocus(): Boolean {
