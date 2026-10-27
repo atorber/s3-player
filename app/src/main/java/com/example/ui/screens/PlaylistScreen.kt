@@ -293,6 +293,7 @@ fun PlaylistScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f, fill = false),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
@@ -316,7 +317,8 @@ fun PlaylistScreen(
                             },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isStreaming) ElectricCyan else AwsAmber
+                            color = if (isStreaming) ElectricCyan else AwsAmber,
+                            maxLines = 1
                         )
                         Text(
                             text = "· ${playerState.telemetry.latencyMs}ms · ${
@@ -328,7 +330,9 @@ fun PlaylistScreen(
                             } MB/s",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
-                            color = TextLowContrast
+                            color = TextLowContrast,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -567,13 +571,12 @@ fun PlaylistScreen(
                     }
                 }
 
-                // Complete Master Transport Control Bar (循环 / 上一首 / 快退10s / 播放暂停 / 快进30s / 下一首 / 停止)
+                // 辅助控制栏：循环模式切换 + 停止播放按钮 (独立行，空间自适应)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 1. 循环模式按钮
                     val loopIcon = when (playerState.loopMode) {
                         LoopMode.SINGLE -> Icons.Default.RepeatOne
                         else -> Icons.Default.Repeat
@@ -592,8 +595,13 @@ fun PlaylistScreen(
                                 if (isLoopOn) AwsAmber.copy(alpha = 0.16f)
                                 else SurfaceContainerHigh
                             )
+                            .border(
+                                1.dp,
+                                if (isLoopOn) AwsAmber.copy(alpha = 0.5f) else Color.Transparent,
+                                RoundedCornerShape(8.dp)
+                            )
                             .clickable { onToggleRepeat() }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
                             .testTag("playlist_toggle_loop_btn")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -601,293 +609,321 @@ fun PlaylistScreen(
                                 imageVector = loopIcon,
                                 contentDescription = loopLabel,
                                 tint = if (isLoopOn) AwsAmber else TextMediumContrast,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(14.dp)
                             )
-                            Spacer(modifier = Modifier.width(3.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = loopLabel,
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (isLoopOn) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isLoopOn) AwsAmber else TextMediumContrast
                             )
                         }
                     }
 
-                    // 2. 核心播放控制按钮组
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // 停止按钮
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerHigh)
+                            .clickable { onStopPlayback() }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .testTag("hero_btn_stop"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        IconButton(
-                            onClick = onPlayPrevious,
-                            enabled = tracks.isNotEmpty(),
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceContainerHigh)
-                                .testTag("hero_btn_prev")
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.SkipPrevious,
-                                contentDescription = "上一首",
-                                tint = TextHighContrast,
-                                modifier = Modifier.size(19.dp)
+                                imageVector = Icons.Default.Stop,
+                                contentDescription = "停止播放",
+                                tint = if (playerState.status == PlaybackStatus.PLAYING) StatusRed else TextMediumContrast,
+                                modifier = Modifier.size(14.dp)
                             )
-                        }
-
-                        IconButton(
-                            onClick = onSkipBackward10,
-                            enabled = currentTrack != null,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceContainerHigh)
-                                .testTag("hero_btn_replay10")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Replay10,
-                                contentDescription = "快退10秒",
-                                tint = TextHighContrast,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        val isPlaying = playerState.status == PlaybackStatus.PLAYING ||
-                                playerState.status == PlaybackStatus.BUFFERING
-                        IconButton(
-                            onClick = onTogglePlayPause,
-                            enabled = currentTrack != null || tracks.isNotEmpty(),
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(CircleShape)
-                                .background(if (isPlaying) AwsAmber else ElectricCyan)
-                                .testTag("hero_btn_play_pause")
-                        ) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isPlaying) "暂停" else "播放",
-                                tint = AetherVoid,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onSkipForward30,
-                            enabled = currentTrack != null,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceContainerHigh)
-                                .testTag("hero_btn_forward30")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Forward30,
-                                contentDescription = "快进30秒",
-                                tint = TextHighContrast,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onPlayNext,
-                            enabled = tracks.isNotEmpty(),
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceContainerHigh)
-                                .testTag("hero_btn_next")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.SkipNext,
-                                contentDescription = "下一首",
-                                tint = TextHighContrast,
-                                modifier = Modifier.size(19.dp)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "停止",
+                                fontSize = 11.sp,
+                                color = if (playerState.status == PlaybackStatus.PLAYING) StatusRed else TextMediumContrast
                             )
                         }
                     }
+                }
 
-                    // 3. 停止按钮
-                    IconButton(
-                        onClick = onStopPlayback,
+                // 核心控制按钮行：上一首 / 快退10s / 播放暂停(Hero 52dp) / 快进30s / 下一首
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 上一首
+                    Box(
                         modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .size(38.dp)
+                            .clip(CircleShape)
                             .background(SurfaceContainerHigh)
-                            .testTag("hero_btn_stop")
+                            .clickable(enabled = tracks.isNotEmpty()) { onPlayPrevious() }
+                            .testTag("hero_btn_prev"),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Stop,
-                            contentDescription = "停止播放",
-                            tint = if (playerState.status == PlaybackStatus.PLAYING) StatusRed else TextMediumContrast,
-                            modifier = Modifier.size(16.dp)
+                            imageVector = Icons.Default.SkipPrevious,
+                            contentDescription = "上一首",
+                            tint = if (tracks.isNotEmpty()) TextHighContrast else TextLowContrast,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // 快退10s
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceContainerHigh)
+                            .clickable(enabled = currentTrack != null) { onSkipBackward10() }
+                            .testTag("hero_btn_replay10"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Replay10,
+                            contentDescription = "快退10秒",
+                            tint = if (currentTrack != null) TextHighContrast else TextLowContrast,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // 主播放/暂停 (突出的大圆形高光按钮)
+                    val isPlaying = playerState.status == PlaybackStatus.PLAYING ||
+                            playerState.status == PlaybackStatus.BUFFERING
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(if (isPlaying) AwsAmber else ElectricCyan)
+                            .clickable(enabled = currentTrack != null || tracks.isNotEmpty()) { onTogglePlayPause() }
+                            .testTag("hero_btn_play_pause"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "暂停" else "播放",
+                            tint = AetherVoid,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    // 快进30s
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceContainerHigh)
+                            .clickable(enabled = currentTrack != null) { onSkipForward30() }
+                            .testTag("hero_btn_forward30"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Forward30,
+                            contentDescription = "快进30秒",
+                            tint = if (currentTrack != null) TextHighContrast else TextLowContrast,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // 下一首
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceContainerHigh)
+                            .clickable(enabled = tracks.isNotEmpty()) { onPlayNext() }
+                            .testTag("hero_btn_next"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = "下一首",
+                            tint = if (tracks.isNotEmpty()) TextHighContrast else TextLowContrast,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
             }
         }
 
-        // 3. 播放队列标题栏与真实快捷工具栏 (Queue Header & Action Bar)
+        // 3. 播放队列标题栏与快捷工具栏 (Queue Header & Action Bar - 响应式双行架构)
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Row 1: 队列标题与统计 (左侧) + 监听路径指示 (右侧)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "播放队列 (${tracks.size})",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextHighContrast
-                            )
-                            if (currentIndex > 0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "播放队列 (${tracks.size})",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextHighContrast
+                        )
+                        if (currentIndex > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(SurfaceContainer)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
                                 Text(
-                                    text = "· 已播 $currentIndex 首",
-                                    fontSize = 11.sp,
-                                    color = TextLowContrast
+                                    text = "已播 $currentIndex 首",
+                                    fontSize = 10.sp,
+                                    color = TextMediumContrast
                                 )
                             }
                         }
-                        Text(
-                            text = "监听路径: $monitoredLocation",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = TextLowContrast,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                     }
 
-                    // 右侧：队列真实操作按钮组 (目录监听 / 新文件自动播 / 清理已播 / 清空全部)
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Text(
+                        text = "监听: $monitoredLocation",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        color = TextLowContrast,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+
+                // Row 2: 独立全宽横向滚动胶丸栏 (窄屏下绝不挤占标题，手势滑动流畅)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 0. 目录监听开关
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(
+                                if (isDirectoryMonitoringEnabled) AwsAmber.copy(alpha = 0.16f)
+                                else SurfaceContainer
+                            )
+                            .border(
+                                1.dp,
+                                if (isDirectoryMonitoringEnabled) AwsAmber.copy(alpha = 0.5f) else BorderSubtle,
+                                RoundedCornerShape(7.dp)
+                            )
+                            .clickable { onToggleDirectoryMonitoring() }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .testTag("playlist_toggle_monitoring_btn")
                     ) {
-                        // 0. 目录监听开关
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Sensors,
+                                contentDescription = "目录监听",
+                                tint = if (isDirectoryMonitoringEnabled) AwsAmber else TextMediumContrast,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = if (isDirectoryMonitoringEnabled) "监听已开" else "监听已关",
+                                fontSize = 10.sp,
+                                fontWeight = if (isDirectoryMonitoringEnabled) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isDirectoryMonitoringEnabled) AwsAmber else TextMediumContrast
+                            )
+                        }
+                    }
+
+                    // 1. 新增音频自动播放开关
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(
+                                if (isAutoPlayNewEnabled) ElectricCyan.copy(alpha = 0.16f)
+                                else SurfaceContainer
+                            )
+                            .border(
+                                1.dp,
+                                if (isAutoPlayNewEnabled) ElectricCyan.copy(alpha = 0.5f) else BorderSubtle,
+                                RoundedCornerShape(7.dp)
+                            )
+                            .clickable { onToggleAutoPlayNew() }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .testTag("playlist_toggle_autoplay_btn")
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isAutoPlayNewEnabled) Icons.Default.MotionPhotosAuto else Icons.Default.PlayCircle,
+                                contentDescription = "新音频自动播放",
+                                tint = if (isAutoPlayNewEnabled) ElectricCyan else TextMediumContrast,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = if (isAutoPlayNewEnabled) "新曲自动播" else "手动触发",
+                                fontSize = 10.sp,
+                                fontWeight = if (isAutoPlayNewEnabled) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isAutoPlayNewEnabled) ElectricCyan else TextMediumContrast
+                            )
+                        }
+                    }
+
+                    // 2. 清理已播曲目
+                    if (tracks.isNotEmpty()) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(7.dp))
-                                .background(
-                                    if (isDirectoryMonitoringEnabled) AwsAmber.copy(alpha = 0.16f)
-                                    else SurfaceContainer
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isDirectoryMonitoringEnabled) AwsAmber.copy(alpha = 0.5f) else BorderSubtle,
-                                    RoundedCornerShape(7.dp)
-                                )
-                                .clickable { onToggleDirectoryMonitoring() }
+                                .background(SurfaceContainer)
+                                .border(1.dp, BorderSubtle, RoundedCornerShape(7.dp))
+                                .clickable { onClearPlayed() }
                                 .padding(horizontal = 8.dp, vertical = 5.dp)
-                                .testTag("playlist_toggle_monitoring_btn")
+                                .testTag("playlist_clear_played_btn")
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.Sensors,
-                                    contentDescription = "目录监听",
-                                    tint = if (isDirectoryMonitoringEnabled) AwsAmber else TextMediumContrast,
+                                    imageVector = Icons.Default.CleaningServices,
+                                    contentDescription = "清理已播",
+                                    tint = TextMediumContrast,
                                     modifier = Modifier.size(13.dp)
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = if (isDirectoryMonitoringEnabled) "监听已开" else "监听已关",
+                                    text = "清理已播",
                                     fontSize = 10.sp,
-                                    fontWeight = if (isDirectoryMonitoringEnabled) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isDirectoryMonitoringEnabled) AwsAmber else TextMediumContrast
+                                    color = TextHighContrast
                                 )
                             }
                         }
 
-                        // 1. 新增音频自动播放开关
+                        // 3. 清空全部队列
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(7.dp))
-                                .background(
-                                    if (isAutoPlayNewEnabled) ElectricCyan.copy(alpha = 0.16f)
-                                    else SurfaceContainer
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isAutoPlayNewEnabled) ElectricCyan.copy(alpha = 0.5f) else BorderSubtle,
-                                    RoundedCornerShape(7.dp)
-                                )
-                                .clickable { onToggleAutoPlayNew() }
+                                .background(SurfaceContainer)
+                                .border(1.dp, BorderSubtle, RoundedCornerShape(7.dp))
+                                .clickable { onClearAll() }
                                 .padding(horizontal = 8.dp, vertical = 5.dp)
-                                .testTag("playlist_toggle_autoplay_btn")
+                                .testTag("playlist_clear_all_btn")
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = if (isAutoPlayNewEnabled) Icons.Default.MotionPhotosAuto else Icons.Default.PlayCircle,
-                                    contentDescription = "新音频自动播放",
-                                    tint = if (isAutoPlayNewEnabled) ElectricCyan else TextMediumContrast,
-                                    modifier = Modifier.size(13.dp)
+                                    imageVector = Icons.Default.DeleteSweep,
+                                    contentDescription = "清空队列",
+                                    tint = StatusRed.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(14.dp)
                                 )
-                                Spacer(modifier = Modifier.width(3.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
                                 Text(
-                                    text = if (isAutoPlayNewEnabled) "新曲自动播" else "手动触发",
+                                    text = "清空",
                                     fontSize = 10.sp,
-                                    fontWeight = if (isAutoPlayNewEnabled) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isAutoPlayNewEnabled) ElectricCyan else TextMediumContrast
+                                    color = TextMediumContrast
                                 )
-                            }
-                        }
-
-                        // 2. 清理已播曲目
-                        if (tracks.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(SurfaceContainer)
-                                    .border(1.dp, BorderSubtle, RoundedCornerShape(7.dp))
-                                    .clickable { onClearPlayed() }
-                                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                                    .testTag("playlist_clear_played_btn")
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.CleaningServices,
-                                        contentDescription = "清理已播",
-                                        tint = TextMediumContrast,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = "清理已播",
-                                        fontSize = 10.sp,
-                                        color = TextHighContrast
-                                    )
-                                }
-                            }
-
-                            // 3. 清空全部队列
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(SurfaceContainer)
-                                    .border(1.dp, BorderSubtle, RoundedCornerShape(7.dp))
-                                    .clickable { onClearAll() }
-                                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                                    .testTag("playlist_clear_all_btn")
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.DeleteSweep,
-                                        contentDescription = "清空队列",
-                                        tint = StatusRed.copy(alpha = 0.85f),
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text(
-                                        text = "清空",
-                                        fontSize = 10.sp,
-                                        color = TextMediumContrast
-                                    )
-                                }
                             }
                         }
                     }
@@ -1052,7 +1088,8 @@ fun PlaylistScreen(
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 // 格式徽标
                                 Box(
@@ -1139,25 +1176,27 @@ fun PlaylistScreen(
                                     fontSize = 10.sp,
                                     color = TextLowContrast,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                             }
                         }
                     }
 
-                    // 右侧：队列项控制按钮
+                    // 右侧：紧凑型队列项控制按钮组 (替换默认 48dp 的 IconButton，窄屏下绝不挤压曲目标题)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (isPlayingThis) {
-                            IconButton(
-                                onClick = onStopPlayback,
+                            Box(
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(CircleShape)
                                     .background(SurfaceContainerHigh)
-                                    .testTag("btn_stop_${track.id}")
+                                    .clickable { onStopPlayback() }
+                                    .testTag("btn_stop_${track.id}"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Stop,
@@ -1166,13 +1205,14 @@ fun PlaylistScreen(
                                     modifier = Modifier.size(15.dp)
                                 )
                             }
-                            IconButton(
-                                onClick = onTogglePlayPause,
+                            Box(
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(CircleShape)
                                     .background(AwsAmber)
-                                    .testTag("btn_pause_${track.id}")
+                                    .clickable { onTogglePlayPause() }
+                                    .testTag("btn_pause_${track.id}"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Pause,
@@ -1182,13 +1222,14 @@ fun PlaylistScreen(
                                 )
                             }
                         } else if (isPausedThis) {
-                            IconButton(
-                                onClick = onStopPlayback,
+                            Box(
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(CircleShape)
                                     .background(SurfaceContainerHigh)
-                                    .testTag("btn_stop_${track.id}")
+                                    .clickable { onStopPlayback() }
+                                    .testTag("btn_stop_${track.id}"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Stop,
@@ -1197,13 +1238,14 @@ fun PlaylistScreen(
                                     modifier = Modifier.size(15.dp)
                                 )
                             }
-                            IconButton(
-                                onClick = onTogglePlayPause,
+                            Box(
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(CircleShape)
                                     .background(ElectricCyan)
-                                    .testTag("btn_resume_${track.id}")
+                                    .clickable { onTogglePlayPause() }
+                                    .testTag("btn_resume_${track.id}"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
@@ -1214,48 +1256,55 @@ fun PlaylistScreen(
                             }
                         } else {
                             if (!isNextUp) {
-                                IconButton(
-                                    onClick = { onEnqueueNext(track) },
+                                Box(
                                     modifier = Modifier
                                         .size(28.dp)
-                                        .testTag("btn_play_next_${track.id}")
+                                        .clip(CircleShape)
+                                        .background(SurfaceContainerHigh.copy(alpha = 0.5f))
+                                        .clickable { onEnqueueNext(track) }
+                                        .testTag("btn_play_next_${track.id}"),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.QueuePlayNext,
                                         contentDescription = "下一首播放 (优先插队)",
                                         tint = ElectricCyanDim,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
                                 }
                             }
 
-                            IconButton(
-                                onClick = { onPlayTrack(track) },
+                            Box(
                                 modifier = Modifier
                                     .size(28.dp)
                                     .clip(CircleShape)
                                     .background(SurfaceContainerHigh)
-                                    .testTag("btn_play_${track.id}")
+                                    .clickable { onPlayTrack(track) }
+                                    .testTag("btn_play_${track.id}"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
                                     contentDescription = "立即播放",
                                     tint = TextHighContrast,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                             }
 
-                            IconButton(
-                                onClick = { onRemoveTrack(track) },
+                            Box(
                                 modifier = Modifier
                                     .size(28.dp)
-                                    .testTag("btn_remove_${track.id}")
+                                    .clip(CircleShape)
+                                    .background(SurfaceContainerHigh.copy(alpha = 0.5f))
+                                    .clickable { onRemoveTrack(track) }
+                                    .testTag("btn_remove_${track.id}"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "从队列移除",
                                     tint = TextLowContrast,
-                                    modifier = Modifier.size(15.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
                         }
