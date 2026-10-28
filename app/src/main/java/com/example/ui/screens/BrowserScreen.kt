@@ -660,7 +660,7 @@ fun BrowserScreen(
                                 Text(
                                     text = cleanName,
                                     color = TextHighContrast,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     fontFamily = FontFamily.Monospace,
                                     maxLines = 1,
@@ -673,7 +673,7 @@ fun BrowserScreen(
                                         "s3://$currentBucket/${folder.fullPrefix}"
                                     },
                                     color = TextLowContrast,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -904,12 +904,12 @@ fun BrowserScreen(
                                         isPausedThis -> AwsAmber
                                         else -> TextHighContrast
                                     },
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     fontWeight = if (isCurrentTrack) FontWeight.Bold else FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
+                                Spacer(modifier = Modifier.height(3.dp))
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -923,7 +923,7 @@ fun BrowserScreen(
                                         Text(
                                             text = track.format.uppercase(),
                                             color = AwsAmberLight,
-                                            fontSize = 9.sp,
+                                            fontSize = 10.sp,
                                             fontFamily = FontFamily.Monospace,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -933,7 +933,7 @@ fun BrowserScreen(
                                             imageVector = Icons.Default.CloudDone,
                                             contentDescription = "已缓存",
                                             tint = StatusGreen,
-                                            modifier = Modifier.size(12.dp)
+                                            modifier = Modifier.size(13.dp)
                                         )
                                     }
                                     val folderPrefix = if (track.key.contains('/')) "📁 " + track.key.substringBeforeLast('/') + "/ · " else ""
@@ -941,7 +941,7 @@ fun BrowserScreen(
                                         text = "${if (searchQuery.isNotBlank() || isRecursiveScan) folderPrefix else ""}${track.durationFormatted} · ${track.sizeFormatted}" +
                                                 if (isRecursiveScan) " · ${track.artistOrProject}" else "",
                                         color = TextLowContrast,
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )

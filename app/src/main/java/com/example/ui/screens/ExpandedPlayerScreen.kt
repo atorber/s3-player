@@ -1,13 +1,13 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,55 +27,46 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Loop
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 import com.example.audio.LoopMode
 import com.example.audio.PlaybackStatus
 import com.example.audio.PlayerState
-import com.example.ui.components.AetherPeakMeter
 import com.example.ui.components.AetherStatusChip
 import com.example.ui.components.AetherWaveform
-import com.example.ui.theme.AetherSurface
 import com.example.ui.theme.AetherSurfaceTier1
 import com.example.ui.theme.AetherSurfaceTier2
 import com.example.ui.theme.AetherVoid
@@ -84,6 +75,8 @@ import com.example.ui.theme.BorderCyanGlow
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.StatusGreen
+import com.example.ui.theme.SurfaceContainerHigh
+import com.example.ui.theme.SurfaceContainerHighest
 import com.example.ui.theme.TextHighContrast
 import com.example.ui.theme.TextLowContrast
 import com.example.ui.theme.TextMediumContrast
@@ -95,15 +88,15 @@ fun ExpandedPlayerScreen(
     onTogglePlayPause: () -> Unit,
     onSeekTo: (Long) -> Unit,
     onScrub: (Boolean, Long) -> Unit,
-    onSkipForward10s: () -> Unit,
+    onSkipForward30s: () -> Unit,
     onSkipBackward10s: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayPrevious: () -> Unit,
     onSetPlaybackSpeed: (Float) -> Unit,
     onToggleLoopMode: () -> Unit,
-    onSetAbPointA: () -> Unit,
-    onSetAbPointB: () -> Unit,
-    onClearAbLoop: () -> Unit,
+    onSetAbPointA: () -> Unit = {},
+    onSetAbPointB: () -> Unit = {},
+    onClearAbLoop: () -> Unit = {},
     onOpenTelemetry: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleCache: () -> Unit,
@@ -117,7 +110,7 @@ fun ExpandedPlayerScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
-        targetValue = if (isPlaying || isBuffering) 1.25f else 1.0f,
+        targetValue = if (isPlaying || isBuffering) 1.22f else 1.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(1200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -125,14 +118,24 @@ fun ExpandedPlayerScreen(
         label = "pulseScale"
     )
 
+    // Subtle vinyl rotation animation when playing
+    val rotationAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(18000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "vinylRotate"
+    )
+
     val currentDisplayPos = if (playerState.isScrubbing) playerState.scrubPositionMs else playerState.currentPositionMs
 
     fun formatTimecode(posMs: Long): String {
-        val totalSec = posMs / 1000
+        val totalSec = (posMs / 1000).coerceAtLeast(0)
         val min = totalSec / 60
         val sec = totalSec % 60
-        val ms = posMs % 1000
-        return String.format("%02d:%02d.%03d", min, sec, ms)
+        return String.format(java.util.Locale.US, "%02d:%02d", min, sec)
     }
 
     Column(
@@ -140,19 +143,19 @@ fun ExpandedPlayerScreen(
             .fillMaxSize()
             .background(AetherVoid)
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 32.dp)
+            .padding(bottom = 36.dp)
             .testTag("expanded_player_sheet")
     ) {
         // Drag Handle & Top Inspection Bar
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 4.dp),
+                .padding(top = 10.dp, bottom = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
                 modifier = Modifier
-                    .size(36.dp, 4.dp)
+                    .size(40.dp, 4.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(TextLowContrast.copy(alpha = 0.5f))
             )
@@ -168,7 +171,7 @@ fun ExpandedPlayerScreen(
             IconButton(
                 onClick = onCollapse,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
                     .background(AetherSurfaceTier1)
                     .testTag("player_collapse_btn")
@@ -183,17 +186,16 @@ fun ExpandedPlayerScreen(
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "S3 流媒体控制台",
+                    text = "正在播放",
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
                     color = ElectricCyan
                 )
                 Text(
-                    text = "${playerState.telemetry.s3RegionEdge} • ${playerState.telemetry.latencyMs}ms",
+                    text = track.bucketName,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     color = TextLowContrast
                 )
             }
@@ -202,7 +204,7 @@ fun ExpandedPlayerScreen(
                 IconButton(
                     onClick = onToggleFavorite,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
                         .background(AetherSurfaceTier1)
                 ) {
@@ -210,33 +212,33 @@ fun ExpandedPlayerScreen(
                         imageVector = if (track.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                         contentDescription = "收藏",
                         tint = if (track.isFavorite) AwsAmber else TextLowContrast,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 IconButton(
                     onClick = onOpenTelemetry,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
                         .background(AetherSurfaceTier1)
                         .testTag("player_inspect_btn")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.GraphicEq,
-                        contentDescription = "音频遥测与S3响应头",
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "音频均衡器",
                         tint = ElectricCyan,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Central Visualizer: Cosmic Isometric 3D Audio Cube Artwork
+        // Central Visualizer: Elegant Vinyl Record Artwork
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -246,58 +248,84 @@ fun ExpandedPlayerScreen(
             // Ambient Under-Glow
             Box(
                 modifier = Modifier
-                    .size(190.dp)
-                    .clip(RoundedCornerShape(24.dp))
+                    .size(200.dp)
                     .shadow(
                         elevation = 28.dp,
-                        shape = RoundedCornerShape(24.dp),
+                        shape = CircleShape,
                         spotColor = if (isPlaying) AwsAmber.copy(alpha = 0.35f) else ElectricCyan.copy(alpha = 0.2f),
                         ambientColor = ElectricCyan.copy(alpha = 0.15f)
                     )
-                    .background(AetherSurfaceTier1)
-                    .border(1.dp, if (isPlaying) BorderCyanGlow else BorderSubtle, RoundedCornerShape(24.dp)),
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFF22262E),
+                                Color(0xFF14171D),
+                                Color(0xFF0C0E12)
+                            )
+                        )
+                    )
+                    .border(2.dp, if (isPlaying) BorderCyanGlow else BorderSubtle, CircleShape)
+                    .rotate(if (isPlaying) rotationAngle else 0f),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_aether_cube),
-                    contentDescription = "Aether 3D Audio Telemetry Core",
+                // Vinyl Grooves Canvas
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val radiusStep = size.minDimension / 14f
+                    for (i in 2..5) {
+                        drawCircle(
+                            color = Color(0xFF2E3440).copy(alpha = 0.4f),
+                            radius = i * radiusStep,
+                            style = Stroke(width = 1f)
+                        )
+                    }
+                }
+
+                // Vinyl Center Label
+                Box(
                     modifier = Modifier
-                        .size(150.dp)
-                        .scale(if (isPlaying) 1.03f else 1.0f)
-                )
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(AwsAmber, Color(0xFFE65100))
+                            )
+                        )
+                        .border(2.dp, ElectricCyan.copy(alpha = 0.6f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = AetherVoid,
+                        modifier = Modifier.size(34.dp)
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Stereo Peak dB Meters
-        Box(modifier = Modifier.padding(horizontal = 20.dp)) {
-            AetherPeakMeter(
-                leftDb = playerState.telemetry.leftChannelDb,
-                rightDb = playerState.telemetry.rightChannelDb
-            )
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         // Track Title & S3 Object Key Path
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 22.dp)
         ) {
             Text(
                 text = track.title,
                 fontFamily = FontFamily.SansSerif,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextHighContrast
+                color = TextHighContrast,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = track.artistOrProject,
+                text = track.artistOrProject.ifBlank { "S3 音频对象" },
                 fontFamily = FontFamily.SansSerif,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = TextMediumContrast
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -306,20 +334,25 @@ fun ExpandedPlayerScreen(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
                 color = ElectricCyan,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // Technical Telemetry Chips Row
+        // Technical Audio Badges Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 22.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            AetherStatusChip(
+                label = track.format.uppercase(),
+                borderColor = AwsAmber.copy(alpha = 0.5f),
+                textColor = AwsAmber
+            )
             AetherStatusChip(
                 label = track.sampleRate,
                 borderColor = ElectricCyan.copy(alpha = 0.4f),
@@ -327,8 +360,8 @@ fun ExpandedPlayerScreen(
             )
             AetherStatusChip(
                 label = track.channels,
-                borderColor = AwsAmber.copy(alpha = 0.4f),
-                textColor = AwsAmber
+                borderColor = BorderSubtle,
+                textColor = TextMediumContrast
             )
             AetherStatusChip(
                 label = "缓冲 ${playerState.bufferPercentage}%",
@@ -336,17 +369,12 @@ fun ExpandedPlayerScreen(
                 borderColor = BorderSubtle,
                 textColor = TextMediumContrast
             )
-            AetherStatusChip(
-                label = track.storageClass,
-                borderColor = BorderSubtle,
-                textColor = TextLowContrast
-            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         // Interactive Dynamic Waveform Visualizer & Seek Bar
-        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Box(modifier = Modifier.padding(horizontal = 18.dp)) {
             AetherWaveform(
                 amplitudes = track.getWaveformPoints(),
                 currentPositionMs = playerState.currentPositionMs,
@@ -355,7 +383,7 @@ fun ExpandedPlayerScreen(
                 isScrubbing = playerState.isScrubbing,
                 scrubPositionMs = playerState.scrubPositionMs,
                 onScrub = onScrub,
-                heightDp = 84
+                heightDp = 80
             )
         }
 
@@ -363,7 +391,7 @@ fun ExpandedPlayerScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 6.dp),
+                .padding(horizontal = 22.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -383,7 +411,7 @@ fun ExpandedPlayerScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Master Transport Controls Row
         Row(
@@ -393,24 +421,23 @@ fun ExpandedPlayerScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Loop Mode Button (Ghost/Tertiary: shifts to Amber when active)
+            // Loop Mode Button
             IconButton(
                 onClick = onToggleLoopMode,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .testTag("player_loop_btn")
             ) {
                 val loopIcon = when (playerState.loopMode) {
                     LoopMode.SINGLE -> Icons.Default.RepeatOne
-                    LoopMode.ALL, LoopMode.AB_REPEAT -> Icons.Default.Repeat
-                    LoopMode.OFF -> Icons.Default.Repeat
+                    else -> Icons.Default.Repeat
                 }
                 val loopTint = if (playerState.loopMode != LoopMode.OFF) AwsAmber else TextLowContrast
                 Icon(
                     imageVector = loopIcon,
                     contentDescription = "循环模式",
                     tint = loopTint,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
@@ -418,7 +445,7 @@ fun ExpandedPlayerScreen(
             IconButton(
                 onClick = onSkipBackward10s,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .testTag("player_rewind_btn")
             ) {
                 Icon(
@@ -434,7 +461,6 @@ fun ExpandedPlayerScreen(
                 modifier = Modifier.size(72.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // Radiant pulse ring
                 if (isPlaying || isBuffering) {
                     Box(
                         modifier = Modifier
@@ -472,16 +498,16 @@ fun ExpandedPlayerScreen(
                 }
             }
 
-            // Skip Forward 10s
+            // Skip Forward 30s (Harmonized standard)
             IconButton(
-                onClick = onSkipForward10s,
+                onClick = onSkipForward30s,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .testTag("player_forward_btn")
             ) {
                 Icon(
                     imageVector = Icons.Default.FastForward,
-                    contentDescription = "快进10秒",
+                    contentDescription = "快进30秒",
                     tint = TextHighContrast,
                     modifier = Modifier.size(26.dp)
                 )
@@ -491,7 +517,7 @@ fun ExpandedPlayerScreen(
             IconButton(
                 onClick = onPlayNext,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .testTag("player_skip_next_btn")
             ) {
                 Icon(
@@ -503,100 +529,48 @@ fun ExpandedPlayerScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
-        // AB Looper Bar & Playback Speed Bar
+        // Playback Speed Selector Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 22.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // AB Repeat Region Looper
+            Text(
+                text = "播放倍速",
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextMediumContrast
+            )
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "A-B 循环:",
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextLowContrast
-                )
-
-                // Point A button
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (playerState.abPointA != null) AwsAmber else AetherSurfaceTier2)
-                        .border(1.dp, if (playerState.abPointA != null) AwsAmber else BorderSubtle, RoundedCornerShape(4.dp))
-                        .clickable(onClick = onSetAbPointA)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = if (playerState.abPointA != null) "A: ${(playerState.abPointA / 1000)}s" else "[A点]",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (playerState.abPointA != null) AetherVoid else TextHighContrast
-                    )
-                }
-
-                // Point B button
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (playerState.abPointB != null) AwsAmber else AetherSurfaceTier2)
-                        .border(1.dp, if (playerState.abPointB != null) AwsAmber else BorderSubtle, RoundedCornerShape(4.dp))
-                        .clickable(onClick = onSetAbPointB)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = if (playerState.abPointB != null) "B: ${(playerState.abPointB / 1000)}s" else "[B点]",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (playerState.abPointB != null) AetherVoid else TextHighContrast
-                    )
-                }
-
-                if (playerState.abPointA != null || playerState.abPointB != null) {
-                    Text(
-                        text = "清除",
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFEF4444),
-                        modifier = Modifier
-                            .clickable(onClick = onClearAbLoop)
-                            .padding(4.dp)
-                    )
-                }
-            }
-
-            // Speed Selector Chips
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                listOf(0.8f, 1.0f, 1.25f, 1.5f).forEach { spd ->
+                listOf(1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
                     val isSelected = playerState.playbackSpeed == spd
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (isSelected) ElectricCyan.copy(alpha = 0.2f) else AetherSurfaceTier2)
-                            .border(1.dp, if (isSelected) ElectricCyan else BorderSubtle, RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isSelected) ElectricCyan.copy(alpha = 0.2f) else SurfaceContainerHigh)
+                            .border(
+                                1.dp,
+                                if (isSelected) ElectricCyan else Color.Transparent,
+                                RoundedCornerShape(6.dp)
+                            )
                             .clickable { onSetPlaybackSpeed(spd) }
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = "${spd}x",
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSelected) ElectricCyan else TextLowContrast
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) ElectricCyan else TextMediumContrast
                         )
                     }
                 }
@@ -605,16 +579,16 @@ fun ExpandedPlayerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Secondary Action: Open Telemetry & Headers Inspector
+        // Equalizer Action Strip
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .padding(horizontal = 22.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(AetherSurfaceTier2)
-                .border(1.dp, ElectricCyan.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                .border(1.dp, ElectricCyan.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
                 .clickable(onClick = onOpenTelemetry)
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
                 .testTag("inspect_headers_btn")
         ) {
             Row(
@@ -624,26 +598,26 @@ fun ExpandedPlayerScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.GraphicEq,
+                        imageVector = Icons.Default.Tune,
                         contentDescription = null,
                         tint = ElectricCyan,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "查看 S3 响应头与 EQ 调音台",
+                        text = "专业音频均衡器 (EQ) 调音台",
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = ElectricCyan
                     )
                 }
 
                 Text(
-                    text = "MD5校验 // 5段EQ >",
+                    text = "${playerState.eqPreset.label} >",
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = TextMediumContrast
+                    fontSize = 12.sp,
+                    color = AwsAmber
                 )
             }
         }

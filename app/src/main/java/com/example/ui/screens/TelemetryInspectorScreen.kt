@@ -21,9 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,12 +41,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.audio.EqPreset
 import com.example.audio.PlayerState
-import com.example.ui.components.AetherStatusChip
 import com.example.ui.theme.AetherSurfaceTier1
 import com.example.ui.theme.AetherSurfaceTier2
 import com.example.ui.theme.AetherVoid
 import com.example.ui.theme.AwsAmber
-import com.example.ui.theme.BorderCyanGlow
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.StatusGreen
@@ -72,7 +69,7 @@ fun TelemetryInspectorScreen(
         modifier = modifier
             .fillMaxSize()
             .background(AetherVoid)
-            .padding(16.dp)
+            .padding(18.dp)
             .verticalScroll(rememberScrollState())
             .testTag("telemetry_inspector_screen")
     ) {
@@ -84,24 +81,24 @@ fun TelemetryInspectorScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.GraphicEq,
+                    imageVector = Icons.Default.Tune,
                     contentDescription = null,
                     tint = ElectricCyan,
                     modifier = Modifier.size(22.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = "S3 遥测与均衡器引擎",
+                        text = "专业音频均衡器与流媒体信息",
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 14.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextHighContrast
                     )
                     Text(
-                        text = "实时边缘传输指标与音频分析",
+                        text = "硬件 5 段均衡器调音与真实连接指标",
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         color = TextLowContrast
                     )
                 }
@@ -110,7 +107,7 @@ fun TelemetryInspectorScreen(
             IconButton(
                 onClick = onClose,
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(36.dp)
                     .clip(CircleShape)
                     .background(AetherSurfaceTier1)
                     .testTag("telemetry_close_btn")
@@ -119,131 +116,59 @@ fun TelemetryInspectorScreen(
                     imageVector = Icons.Default.Close,
                     contentDescription = "关闭",
                     tint = TextHighContrast,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Live Network Telemetry Cards
-        Text(
-            text = "实时 S3 边缘传输遥测 //",
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = AwsAmber
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            TelemetryMetricCard(
-                title = "往返延迟 (RTT)",
-                value = "${telemetry.latencyMs} ms",
-                subtext = "TLS 1.3 // 边缘节点",
-                accentColor = StatusGreen,
-                modifier = Modifier.weight(1f)
-            )
-            TelemetryMetricCard(
-                title = "实时传输吞吐率",
-                value = String.format("%.2f MB/s", telemetry.throughputMBs),
-                subtext = "分块实时传输",
-                accentColor = ElectricCyan,
-                modifier = Modifier.weight(1f)
-            )
-            TelemetryMetricCard(
-                title = "数据包抖动",
-                value = String.format("%.2f ms", telemetry.jitterMs),
-                subtext = "丢包率 0.00%",
-                accentColor = AwsAmber,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
         Spacer(modifier = Modifier.height(18.dp))
 
-        // Raw HTTP S3 Headers Table
-        Text(
-            text = "S3 鉴权元数据响应头 //",
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = ElectricCyan
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(AetherSurfaceTier1)
-                .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-                .padding(12.dp)
-        ) {
-            HeaderRow("x-amz-request-id", "7H9A2Q0K1P4R8T9S")
-            HeaderRow("ETag (MD5 Checksum)", track?.etag ?: "\"e4d909c29af5731b8d234a91f421c002\"")
-            HeaderRow("Content-Type", "audio/${track?.format?.lowercase() ?: "flac"}")
-            HeaderRow("Content-Length", "${track?.sizeBytes ?: 48291040} 字节 (${track?.sizeFormatted ?: "48.2 MB"})")
-            HeaderRow("x-amz-server-side-encryption", "AES256")
-            HeaderRow("x-amz-storage-class", track?.storageClass ?: "EXPRESS_ONEZONE")
-            HeaderRow("Accept-Ranges", "bytes 0-48291039")
-            HeaderRow("Cache-Control", "public, max-age=31536000, immutable")
-            HeaderRow("Last-Modified", track?.lastModified ?: "2026-09-18 14:22:04 UTC")
-            HeaderRow("x-amz-version-id", "3/L4kqtJlcpXroDTDmJ+rmSpXd3dIbrHY")
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // 5-Band Equalizer & Audio Engine
+        // 1. 5-Band Equalizer Section
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "5段均衡器与分轨调音 //",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
+                text = "5 段硬件均衡器",
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = AwsAmber
             )
             Text(
                 text = "当前预设: ${playerState.eqPreset.label}",
                 fontFamily = FontFamily.SansSerif,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = ElectricCyan
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Equalizer Presets Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             EqPreset.values().forEach { preset ->
                 val isSelected = playerState.eqPreset == preset
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(if (isSelected) AwsAmber else AetherSurfaceTier2)
-                        .border(1.dp, if (isSelected) AwsAmber else BorderSubtle, RoundedCornerShape(6.dp))
+                        .border(1.dp, if (isSelected) AwsAmber else BorderSubtle, RoundedCornerShape(8.dp))
                         .clickable { onSetEqPreset(preset) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
                 ) {
                     Text(
                         text = preset.label,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSelected) AetherVoid else TextHighContrast
                     )
                 }
@@ -256,9 +181,9 @@ fun TelemetryInspectorScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(AetherSurfaceTier1)
-                .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
+                .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -272,14 +197,14 @@ fun TelemetryInspectorScreen(
                         Text(
                             text = freq,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextHighContrast
                         )
                         Text(
-                            text = String.format("%+.1f dB", currentDb),
+                            text = String.format(java.util.Locale.US, "%+.1f dB", currentDb),
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (currentDb > 0) AwsAmber else if (currentDb < 0) ElectricCyan else TextMediumContrast
                         )
@@ -299,68 +224,66 @@ fun TelemetryInspectorScreen(
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun TelemetryMetricCard(
-    title: String,
-    value: String,
-    subtext: String,
-    accentColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(AetherSurfaceTier1)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-            .padding(10.dp)
-    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 2. Real Cloud Audio Attributes & Connection Info
         Text(
-            text = title,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextLowContrast
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 13.sp,
+            text = "云端流媒体真实属性",
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = accentColor
+            color = ElectricCyan
         )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = subtext,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 9.sp,
-            color = TextMediumContrast
-        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(AetherSurfaceTier1)
+                .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            InfoRow("音频名称", track?.title ?: "未加载")
+            InfoRow("S3 存储桶", track?.bucketName ?: telemetry.bucketName.ifBlank { "默认存储桶" })
+            InfoRow("网络延迟 (RTT)", "${telemetry.latencyMs} ms")
+            InfoRow("音频格式", track?.format?.uppercase() ?: "FLAC")
+            InfoRow("音频采样率", track?.sampleRate ?: "44.1 kHz")
+            InfoRow("声 道", track?.channels ?: "Stereo 双声道")
+            InfoRow("文件大小", track?.sizeFormatted ?: "--")
+            InfoRow("存储类型", track?.storageClass ?: "STANDARD")
+            if (!track?.etag.isNullOrBlank()) {
+                InfoRow("ETag 校验码", track?.etag ?: "")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun HeaderRow(key: String, value: String) {
+private fun InfoRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = key,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
+            text = label,
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 12.sp,
             color = TextLowContrast,
-            modifier = Modifier.width(130.dp)
+            modifier = Modifier.width(110.dp)
         )
         Text(
             text = value,
             fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             color = TextHighContrast,
             modifier = Modifier.weight(1f)
         )

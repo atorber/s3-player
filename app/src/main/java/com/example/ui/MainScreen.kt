@@ -130,8 +130,8 @@ fun MainScreen(viewModel: AetherViewModel) {
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.navigationBars)
             ) {
-                // Persistent Floating Dock Player (hidden on Playlist tab since Playlist has the full Master Player Hero Console)
-                if (navState.activeTab != 1 && playerState.currentTrack != null) {
+                // Persistent Floating Dock Player across all tabs
+                if (playerState.currentTrack != null) {
                     AetherDockPlayer(
                         playerState = playerState,
                         onExpandPlayer = { viewModel.setExpandedPlayerVisible(true) },
@@ -340,7 +340,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onSeekTo = viewModel::seekTo,
                         onScrub = viewModel::setScrubbing,
-                        onSkipForward10s = viewModel::skipForward10s,
+                        onSkipForward30s = viewModel::skipForward30s,
                         onSkipBackward10s = viewModel::skipBackward10s,
                         onPlayNext = viewModel::playNext,
                         onPlayPrevious = viewModel::playPrevious,
