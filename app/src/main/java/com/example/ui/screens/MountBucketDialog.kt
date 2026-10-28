@@ -77,10 +77,10 @@ fun MountBucketDialog(
         useSsl: Boolean
     ) -> Unit
 ) {
-    var bucketName by remember { mutableStateOf("xtrader") }
-    var endpoint by remember { mutableStateOf("xtrader.oss.cn-north-3.inspurcloudoss.com") }
-    var region by remember { mutableStateOf("cn-north-3") }
-    var accessKey by remember { mutableStateOf("YjNmNjhkOWMtODE5My00MjM5LTgxZGYtNWQ3MzFlNDA4NTlm") }
+    var bucketName by remember { mutableStateOf("") }
+    var endpoint by remember { mutableStateOf("") }
+    var region by remember { mutableStateOf("us-east-1") }
+    var accessKey by remember { mutableStateOf("") }
     var secretKey by remember { mutableStateOf("") }
     var showSecretKey by remember { mutableStateOf(false) }
     var usePathStyle by remember { mutableStateOf(false) }

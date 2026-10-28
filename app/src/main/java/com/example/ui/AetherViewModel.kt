@@ -72,10 +72,10 @@ data class DirectoryTier(
 )
 
 data class SyncSettingsState(
-    val currentBucketName: String = "xtrader",
+    val currentBucketName: String = "",
     val basePrefixPath: String = "/",
-    val endpoint: String = "xtrader.oss.cn-north-3.inspurcloudoss.com",
-    val region: String = "cn-north-3",
+    val endpoint: String = "",
+    val region: String = "us-east-1",
     val accessKeyId: String = "",
     val secretAccessKey: String = "",
     val sessionToken: String = "",
@@ -312,10 +312,13 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
         // Level 1: Root directory level
         val rootFolders = queryImmediateFolders("")
+        val displayBucket = bucketName?.takeIf { it.isNotBlank() }
+            ?: syncSettings.value.currentBucketName.takeIf { it.isNotBlank() }
+            ?: "未配置存储桶"
         tiers.add(
             DirectoryTier(
                 level = 1,
-                title = "根目录层级 (s3://${bucketName ?: "xtrader"}/)",
+                title = "根目录层级 (s3://$displayBucket/)",
                 parentPrefix = "",
                 selectedSegment = segments.getOrNull(0),
                 folders = rootFolders
@@ -866,7 +869,8 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun exportM3u8() {
         viewModelScope.launch {
-            _toastEvent.emit("已生成包含预签名 URL 的 \"s3-xtrader.m3u8\" 播放列表")
+            val b = syncSettings.value.currentBucketName.ifBlank { "audio" }
+            _toastEvent.emit("已生成包含预签名 URL 的 \"s3-$b.m3u8\" 播放列表")
         }
     }
 
@@ -886,10 +890,10 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             _syncSettings.update {
                 it.copy(
                     isSaving = true,
-                    currentBucketName = bucketName.trim().ifBlank { "xtrader" },
+                    currentBucketName = bucketName.trim(),
                     basePrefixPath = prefix.trim(),
-                    endpoint = endpoint.trim().ifBlank { "xtrader.oss.cn-north-3.inspurcloudoss.com" },
-                    region = region.trim().ifBlank { "cn-north-3" },
+                    endpoint = endpoint.trim(),
+                    region = region.trim().ifBlank { "us-east-1" },
                     accessKeyId = accessKeyId.trim(),
                     secretAccessKey = secretAccessKey.trim(),
                     sessionToken = sessionToken.trim(),
@@ -899,8 +903,8 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
 
-            val cleanEndpoint = endpoint.trim().removePrefix("https://").removePrefix("http://").ifBlank { "xtrader.oss.cn-north-3.inspurcloudoss.com" }
-            val cleanBucket = bucketName.trim().ifBlank { "xtrader" }
+            val cleanEndpoint = endpoint.trim().removePrefix("https://").removePrefix("http://")
+            val cleanBucket = bucketName.trim()
             val cleanPrefix = if (prefix.isNotBlank() && !prefix.startsWith("/")) "/${prefix.trim()}" else prefix.trim()
             val authDesc = if (isPublicAccess) "匿名 / 公开访问" else "S3 SigV4 认证"
 
@@ -908,7 +912,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             preferences.currentBucketName = cleanBucket
             preferences.basePrefixPath = cleanPrefix
             preferences.endpoint = cleanEndpoint
-            preferences.region = region.trim().ifBlank { "cn-north-3" }
+            preferences.region = region.trim().ifBlank { "us-east-1" }
             preferences.accessKeyId = accessKeyId.trim()
             preferences.secretAccessKey = secretAccessKey.trim()
             preferences.sessionToken = sessionToken.trim()
@@ -1574,7 +1578,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         storageClass: String
     ) {
         viewModelScope.launch {
-            val currentBucket = _selectedBucketName.value ?: "xtrader"
+            val currentBucket = _selectedBucketName.value ?: syncSettings.value.currentBucketName.ifBlank { "default-bucket" }
             val cleanTitle = title.trim().ifBlank { "new_audio_recording" }
             val cleanFormat = format.trim().uppercase().removePrefix(".")
             val key = "${_currentPrefix.value}$cleanTitle.${cleanFormat.lowercase()}"

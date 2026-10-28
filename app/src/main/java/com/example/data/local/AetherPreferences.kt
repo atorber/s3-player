@@ -7,7 +7,7 @@ class AetherPreferences(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("aether_s3_prefs", Context.MODE_PRIVATE)
 
     var currentBucketName: String
-        get() = prefs.getString("currentBucketName", "xtrader") ?: "xtrader"
+        get() = prefs.getString("currentBucketName", "") ?: ""
         set(value) = prefs.edit().putString("currentBucketName", value).apply()
 
     var basePrefixPath: String
@@ -15,11 +15,11 @@ class AetherPreferences(context: Context) {
         set(value) = prefs.edit().putString("basePrefixPath", value).apply()
 
     var endpoint: String
-        get() = prefs.getString("endpoint", "xtrader.oss.cn-north-3.inspurcloudoss.com") ?: "xtrader.oss.cn-north-3.inspurcloudoss.com"
+        get() = prefs.getString("endpoint", "") ?: ""
         set(value) = prefs.edit().putString("endpoint", value).apply()
 
     var region: String
-        get() = prefs.getString("region", "cn-north-3") ?: "cn-north-3"
+        get() = prefs.getString("region", "us-east-1") ?: "us-east-1"
         set(value) = prefs.edit().putString("region", value).apply()
 
     var accessKeyId: String

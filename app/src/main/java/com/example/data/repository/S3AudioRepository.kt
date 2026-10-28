@@ -25,18 +25,7 @@ class S3AudioRepository(
     val favoriteTracks: Flow<List<S3AudioTrack>> = trackDao.getFavoriteTracks()
 
     init {
-        externalScope.launch(Dispatchers.IO) {
-            // Initialize active bucket configuration if not present
-            val existingBuckets = bucketDao.getAllBuckets().first()
-            if (existingBuckets.isEmpty()) {
-                SampleData.initialBuckets.forEach { bucketDao.insert(it) }
-            }
-            // Seed initial sample tracks if empty to ensure search & offline browsing work immediately
-            val existingTracks = trackDao.getAllTracksList()
-            if (existingTracks.isEmpty()) {
-                trackDao.insertAll(SampleData.getInitialTracks())
-            }
-        }
+        // Production repository starts clean; buckets and tracks are populated via user S3 sync or mounting.
     }
 
     fun getTracksForBucket(bucketName: String): Flow<List<S3AudioTrack>> =

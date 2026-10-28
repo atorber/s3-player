@@ -223,7 +223,7 @@ fun BrowserScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = currentBucket,
+                                    text = currentBucket.ifBlank { "未连接存储桶" },
                                     color = TextHighContrast,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,

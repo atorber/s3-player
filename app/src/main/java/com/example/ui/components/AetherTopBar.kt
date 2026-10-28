@@ -55,7 +55,7 @@ import com.example.ui.theme.TextMediumContrast
 @Composable
 fun AetherTopBar(
     activeTab: Int,
-    currentUri: String = "s3://xtrader/",
+    currentUri: String = "",
     onOpenSyncStatus: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -165,7 +165,7 @@ fun AetherTopBar(
                         }
 
                         Text(
-                            text = currentUri,
+                            text = currentUri.ifBlank { "s3:// (未连接存储桶)" },
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
                             color = TextLowContrast,

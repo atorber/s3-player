@@ -39,7 +39,7 @@ class ExampleUnitTest {
     fun sampleData_containsBucketsAndTracks() {
         val buckets = SampleData.initialBuckets
         assertTrue("Buckets must not be empty", buckets.isNotEmpty())
-        assertTrue("xtrader bucket should exist", buckets.any { it.bucketName == "xtrader" })
+        assertTrue("sample-audio bucket should exist", buckets.any { it.bucketName == "sample-audio" })
 
         val tracks = SampleData.getInitialTracks()
         assertTrue("Tracks must not be empty", tracks.isNotEmpty())

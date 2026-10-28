@@ -96,7 +96,7 @@ fun PlaylistScreen(
     isBannerVisible: Boolean,
     isAutoPlayNewEnabled: Boolean = true,
     isDirectoryMonitoringEnabled: Boolean = true,
-    monitoredLocation: String = "s3://xtrader/",
+    monitoredLocation: String = "",
     bannerTrack: S3AudioTrack? = null,
     onDismissBanner: () -> Unit,
     onPlayTrack: (S3AudioTrack) -> Unit,

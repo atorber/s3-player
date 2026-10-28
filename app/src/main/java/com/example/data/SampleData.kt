@@ -7,10 +7,10 @@ object SampleData {
 
     val initialBuckets = listOf(
         S3Bucket(
-            bucketName = "xtrader",
-            region = "cn-north-3",
-            provider = "S3 兼容协议 (浪潮云 OSS)",
-            endpoint = "xtrader.oss.cn-north-3.inspurcloudoss.com",
+            bucketName = "sample-audio",
+            region = "us-east-1",
+            provider = "标准 S3 协议",
+            endpoint = "s3.us-east-1.amazonaws.com",
             latencyMs = 18,
             objectCount = 18,
             storageSizeFormatted = "1.42 GB",
@@ -68,7 +68,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 1,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/ep04_final_master_v2.flac",
                 title = "ep04_final_master_v2.flac",
                 artistOrProject = "Aether Tech Podcast · Ep 04: Edge Cloud Audio",
@@ -91,7 +91,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 2,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/guest_recording_track_02.flac",
                 title = "guest_recording_track_02.flac",
                 artistOrProject = "通过 S3 PutObject 事件自动添加 · ep04-live/",
@@ -114,7 +114,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 3,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/ep04_ad_sponsor_break.mp3",
                 title = "ep04_ad_sponsor_break.mp3",
                 artistOrProject = "最新 · 自动入队 · 03:45",
@@ -137,7 +137,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 4,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/interviews_part1_host.wav",
                 title = "interviews_part1_host.wav",
                 artistOrProject = "录音主轨 · 22:30 就绪",
@@ -159,7 +159,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 5,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/interviews_part2_remote.wav",
                 title = "interviews_part2_remote.wav",
                 artistOrProject = "远端连线轨 · 19:40 就绪",
@@ -181,7 +181,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 6,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/outro_credits_music.mp3",
                 title = "outro_credits_music.mp3",
                 artistOrProject = "尾声配乐 · 02:50 就绪",
@@ -203,7 +203,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 7,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/ep04_intro_theme.wav",
                 title = "ep04_intro_theme.wav",
                 artistOrProject = "片头音乐 · 02:15",
@@ -225,7 +225,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 8,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/backup_interview_guest.m4a",
                 title = "backup_interview_guest.m4a",
                 artistOrProject = "备用连线录音 · 32:00",
@@ -247,7 +247,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 9,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/interviews-raw/interview_stem_host_uncompressed.wav",
                 title = "interview_stem_host_uncompressed.wav",
                 artistOrProject = "分轨工程 · 主持人未压缩干音",
@@ -267,7 +267,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 10,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/interviews-raw/interview_stem_guest_isolated.wav",
                 title = "interview_stem_guest_isolated.wav",
                 artistOrProject = "分轨工程 · 嘉宾独立音轨",
@@ -287,7 +287,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 11,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/interviews-raw/studio_ambience_room_tone.flac",
                 title = "studio_ambience_room_tone.flac",
                 artistOrProject = "录音室环境底噪采样 · 消除底噪基准",
@@ -309,7 +309,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 12,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/master-mixes/ep04_surround_5_1_master.flac",
                 title = "ep04_surround_5_1_master.flac",
                 artistOrProject = "5.1 环绕声沉浸式空间音频母带",
@@ -329,7 +329,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 13,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep04-live/master-mixes/ep04_radio_edit_broadcast.mp3",
                 title = "ep04_radio_edit_broadcast.mp3",
                 artistOrProject = "广播精简混音版 (320kbps CBR)",
@@ -351,7 +351,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 14,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "sound-effects/sci_fi_transceiver_chirp.wav",
                 title = "sci_fi_transceiver_chirp.wav",
                 artistOrProject = "片头过渡音效 · 科幻电台啸叫",
@@ -371,7 +371,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 15,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "sound-effects/cloud_sync_chime.mp3",
                 title = "cloud_sync_chime.mp3",
                 artistOrProject = "系统提示音 · 云端同步完成",
@@ -433,11 +433,11 @@ object SampleData {
             )
         )
 
-        // Additional multi-tier tracks for xtrader tier-by-tier navigation
+        // Additional multi-tier tracks for sample-audio tier-by-tier navigation
         tracks.add(
             S3AudioTrack(
                 id = 18,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep03-studio/ep03_full_mix.flac",
                 title = "ep03_full_mix.flac",
                 artistOrProject = "录音室混音母带 · 第03期现场",
@@ -457,7 +457,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 19,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2025-season/ep03-studio/ep03_interview_cut.wav",
                 title = "ep03_interview_cut.wav",
                 artistOrProject = "连线专访粗剪轨",
@@ -477,7 +477,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 20,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2024-archive/ep01-origins/ep01_origins_broadcast.mp3",
                 title = "ep01_origins_broadcast.mp3",
                 artistOrProject = "2024 创刊特辑 · 广播重播版",
@@ -497,7 +497,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 21,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "podcasts/2024-archive/ep02-deep-dive/ep02_audio_master.flac",
                 title = "ep02_audio_master.flac",
                 artistOrProject = "2024 专题深潜 · 无损归档",
@@ -517,7 +517,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 22,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "sound-effects/ambience/rain_thunder_storm_loop.flac",
                 title = "rain_thunder_storm_loop.flac",
                 artistOrProject = "双耳声学环境采样 · 雷暴循环",
@@ -537,7 +537,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 23,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "sound-effects/foley/footsteps_gravel_stereo.wav",
                 title = "footsteps_gravel_stereo.wav",
                 artistOrProject = "影视拟音库 · 碎石路步行动作",
@@ -557,7 +557,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 24,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "studio-sessions/take-01-drums/drum_kick_overhead_96k.wav",
                 title = "drum_kick_overhead_96k.wav",
                 artistOrProject = "录音工程分轨 · 底鼓顶置电容麦",
@@ -577,7 +577,7 @@ object SampleData {
         tracks.add(
             S3AudioTrack(
                 id = 25,
-                bucketName = "xtrader",
+                bucketName = "sample-audio",
                 key = "studio-sessions/take-02-vocals/lead_vocal_dry_take02.flac",
                 title = "lead_vocal_dry_take02.flac",
                 artistOrProject = "录音工程分轨 · 人声主轨乾音",

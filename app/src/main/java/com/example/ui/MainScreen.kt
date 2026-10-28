@@ -118,7 +118,11 @@ fun MainScreen(viewModel: AetherViewModel) {
         topBar = {
             AetherTopBar(
                 activeTab = navState.activeTab,
-                currentUri = "s3://${syncSettings.currentBucketName}${if (syncSettings.basePrefixPath.startsWith("/")) syncSettings.basePrefixPath else if (syncSettings.basePrefixPath.isBlank()) "/" else "/${syncSettings.basePrefixPath}"}",
+                currentUri = if (syncSettings.currentBucketName.isNotBlank()) {
+                    "s3://${syncSettings.currentBucketName}${if (syncSettings.basePrefixPath.startsWith("/")) syncSettings.basePrefixPath else if (syncSettings.basePrefixPath.isBlank()) "/" else "/${syncSettings.basePrefixPath}"}"
+                } else {
+                    ""
+                },
                 onOpenSyncStatus = { viewModel.setTelemetryInspectorVisible(true) },
                 onProfileClick = { viewModel.setActiveTab(2) },
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
@@ -158,7 +162,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                 0 -> {
                     // Screen 1: 文件浏览 (Browser)
                     BrowserScreen(
-                        currentBucket = selectedBucketName ?: "xtrader",
+                        currentBucket = selectedBucketName?.takeIf { it.isNotBlank() } ?: syncSettings.currentBucketName,
                         allBuckets = allBuckets,
                         currentPrefix = currentPrefix,
                         folders = browserFolders,
