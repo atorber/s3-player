@@ -66,6 +66,10 @@ class AetherPreferences(context: Context) {
         get() = prefs.getString("monitoredPlaylistPrefix", null)
         set(value) = prefs.edit().putString("monitoredPlaylistPrefix", value).apply()
 
+    var monitoredPlaylistBucket: String?
+        get() = prefs.getString("monitoredPlaylistBucket", null)
+        set(value) = prefs.edit().putString("monitoredPlaylistBucket", value).apply()
+
     var enabledFormats: Set<String>
         get() = prefs.getStringSet("enabledFormats", setOf(".flac", ".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus"))
             ?: setOf(".flac", ".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus")

@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AetherAudioEngine
@@ -12,6 +13,7 @@ import com.example.data.local.AetherDatabase
 import com.example.data.model.S3AudioTrack
 import com.example.data.model.S3Bucket
 import com.example.data.repository.S3AudioRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Collections
 
 data class UiNavigationState(
     val isExpandedPlayerVisible: Boolean = false,
@@ -476,12 +479,20 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     val playlistQueue: StateFlow<List<S3AudioTrack>> = audioEngine.queueFlow
 
     private val _monitoredPlaylistPrefix = MutableStateFlow<String?>(preferences.monitoredPlaylistPrefix)
+    private val _monitoredPlaylistBucket = MutableStateFlow<String?>(preferences.monitoredPlaylistBucket)
+    val monitoredPlaylistBucket: StateFlow<String?> = _monitoredPlaylistBucket.asStateFlow()
 
-    private fun updateMonitoredPlaylistPrefix(prefix: String) {
+    // Thread-safe set of tracks that have already been handled / enqueued by directory monitoring
+    private val processedMonitoredKeys = Collections.synchronizedSet(mutableSetOf<String>())
+
+    fun updateMonitoredPlaylistPrefix(prefix: String, bucket: String? = null) {
         val clean = prefix.trim().trim('/')
         val norm = if (clean.isBlank()) "" else "$clean/"
         _monitoredPlaylistPrefix.value = norm
         preferences.monitoredPlaylistPrefix = norm
+        val b = bucket ?: _selectedBucketName.value?.takeIf { it != "ALL" } ?: syncSettings.value.currentBucketName
+        _monitoredPlaylistBucket.value = b
+        preferences.monitoredPlaylistBucket = b
     }
 
     val activePlaylistPath: StateFlow<String> = combine(
@@ -504,6 +515,16 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.Eagerly, preferences.monitoredPlaylistPrefix ?: "")
 
     init {
+        // Continuously record queued tracks so manual playlist actions don't get falsely re-detected
+        viewModelScope.launch {
+            playlistQueue.collect { queue ->
+                queue.forEach { t ->
+                    processedMonitoredKeys.add(t.key)
+                    processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+                }
+            }
+        }
+
         viewModelScope.launch {
             // Restore configured bucket settings from database if available
             val buckets = repository.allBuckets.first()
@@ -596,7 +617,12 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     fun playTrackFromBrowser(track: S3AudioTrack) {
         val key = track.key.trim().removePrefix("/")
         val folderPrefix = if (key.contains("/")) key.substringBeforeLast("/") + "/" else ""
-        updateMonitoredPlaylistPrefix(folderPrefix)
+        updateMonitoredPlaylistPrefix(folderPrefix, track.bucketName)
+        processedMonitoredKeys.clear()
+        browserTracks.value.forEach { t ->
+            processedMonitoredKeys.add(t.key)
+            processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+        }
         audioEngine.playTrack(track, browserTracks.value)
     }
 
@@ -729,8 +755,26 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             preferences.isSubdirMonitoring = next
             it.copy(isSubdirMonitoring = next)
         }
-        viewModelScope.launch {
-            _toastEvent.emit(if (next) "目录监听已开启：自动检测当前播放列表目录新增音频" else "目录监听已暂停")
+        if (next) {
+            val target = activePlaylistPath.value.trim().trim('/')
+            val normTarget = if (target.isBlank()) "" else "$target/"
+            val bucket = _monitoredPlaylistBucket.value
+                ?: _selectedBucketName.value?.takeIf { it != "ALL" }
+                ?: syncSettings.value.currentBucketName
+            updateMonitoredPlaylistPrefix(normTarget, bucket)
+
+            startPeriodicPolling()
+            viewModelScope.launch(Dispatchers.IO) {
+                pollRealS3AndAutoEnqueue(force = false)
+            }
+            viewModelScope.launch {
+                val locDisplay = if (normTarget.isBlank()) "根目录 /" else normTarget
+                _toastEvent.emit("目录监听已开启：正在实时监控 s3://$bucket/$locDisplay")
+            }
+        } else {
+            viewModelScope.launch {
+                _toastEvent.emit("目录监听已暂停")
+            }
         }
     }
 
@@ -888,8 +932,14 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun playAllInDirectory() {
         viewModelScope.launch {
-            updateMonitoredPlaylistPrefix(_currentPrefix.value)
+            val bucket = _selectedBucketName.value ?: syncSettings.value.currentBucketName
+            updateMonitoredPlaylistPrefix(_currentPrefix.value, bucket)
             val tracks = browserTracks.value
+            processedMonitoredKeys.clear()
+            tracks.forEach { t ->
+                processedMonitoredKeys.add(t.key)
+                processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+            }
             if (tracks.isNotEmpty()) {
                 audioEngine.playTrack(tracks.first(), tracks)
                 _toastEvent.emit("已将当前目录创建为播放列表并开始播放 (${tracks.size} 首)")
@@ -901,8 +951,14 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addCurrentDirectoryToPlaylist() {
         viewModelScope.launch {
-            updateMonitoredPlaylistPrefix(_currentPrefix.value)
+            val bucket = _selectedBucketName.value ?: syncSettings.value.currentBucketName
+            updateMonitoredPlaylistPrefix(_currentPrefix.value, bucket)
             val tracks = browserTracks.value
+            processedMonitoredKeys.clear()
+            tracks.forEach { t ->
+                processedMonitoredKeys.add(t.key)
+                processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+            }
             if (tracks.isNotEmpty()) {
                 audioEngine.updateQueue(tracks)
                 _toastEvent.emit("已将当前目录创建为播放列表 (${tracks.size} 首)")
@@ -930,7 +986,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val bucketName = _selectedBucketName.value ?: syncSettings.value.currentBucketName
             val cleanPrefix = folderPrefix.trim().trim('/')
             val norm = if (cleanPrefix.isBlank()) "" else "$cleanPrefix/"
-            updateMonitoredPlaylistPrefix(norm)
+            updateMonitoredPlaylistPrefix(norm, bucketName)
 
             val all = repository.allTracks.first()
             val folderTracks = sortFolderTracks(
@@ -939,6 +995,11 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                     it.key.trim().removePrefix("/").startsWith(norm)
                 }
             )
+            processedMonitoredKeys.clear()
+            folderTracks.forEach { t ->
+                processedMonitoredKeys.add(t.key)
+                processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+            }
             if (folderTracks.isNotEmpty()) {
                 audioEngine.updateQueue(folderTracks)
                 val folderName = norm.trimEnd('/').substringAfterLast('/')
@@ -960,6 +1021,10 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 fetchResult.onSuccess { res ->
                     val sorted = sortFolderTracks(res.tracks)
+                    sorted.forEach { t ->
+                        processedMonitoredKeys.add(t.key)
+                        processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+                    }
                     if (sorted.isNotEmpty()) {
                         audioEngine.updateQueue(sorted)
                         val folderName = norm.trimEnd('/').substringAfterLast('/')
@@ -980,7 +1045,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val bucketName = _selectedBucketName.value ?: syncSettings.value.currentBucketName
             val cleanPrefix = folderPrefix.trim().trim('/')
             val norm = if (cleanPrefix.isBlank()) "" else "$cleanPrefix/"
-            updateMonitoredPlaylistPrefix(norm)
+            updateMonitoredPlaylistPrefix(norm, bucketName)
 
             val all = repository.allTracks.first()
             val folderTracks = sortFolderTracks(
@@ -989,6 +1054,11 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                     it.key.trim().removePrefix("/").startsWith(norm)
                 }
             )
+            processedMonitoredKeys.clear()
+            folderTracks.forEach { t ->
+                processedMonitoredKeys.add(t.key)
+                processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+            }
             if (folderTracks.isNotEmpty()) {
                 audioEngine.playTrack(folderTracks.first(), folderTracks)
                 val folderName = norm.trimEnd('/').substringAfterLast('/')
@@ -1010,6 +1080,10 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 fetchResult.onSuccess { res ->
                     val sorted = sortFolderTracks(res.tracks)
+                    sorted.forEach { t ->
+                        processedMonitoredKeys.add(t.key)
+                        processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+                    }
                     if (sorted.isNotEmpty()) {
                         audioEngine.playTrack(sorted.first(), sorted)
                         val folderName = norm.trimEnd('/').substringAfterLast('/')
@@ -1033,6 +1107,8 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun removeFromQueue(track: S3AudioTrack) {
         audioEngine.removeFromQueue(track)
+        processedMonitoredKeys.add(track.key)
+        processedMonitoredKeys.add(track.key.trim().removePrefix("/"))
         viewModelScope.launch {
             _toastEvent.emit("已从播放队列移除: ${track.title}")
         }
@@ -1047,8 +1123,16 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun enqueueTrackNext(track: S3AudioTrack) {
         audioEngine.insertNextInQueue(listOf(track))
+        processedMonitoredKeys.add(track.key)
+        processedMonitoredKeys.add(track.key.trim().removePrefix("/"))
         viewModelScope.launch {
             _toastEvent.emit("已将「${track.title}」插队为下一首播放")
+        }
+    }
+
+    fun forceCheckNewUploads() {
+        viewModelScope.launch(Dispatchers.IO) {
+            pollRealS3AndAutoEnqueue(force = true)
         }
     }
 
@@ -1056,26 +1140,40 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         periodicPollingJob?.cancel()
         periodicPollingJob = viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
-                val settings = _syncSettings.value
-                if (!settings.isSubdirMonitoring) {
-                    delay(3000L)
-                    continue
+                try {
+                    val settings = _syncSettings.value
+                    if (!settings.isSubdirMonitoring) {
+                        delay(2000L)
+                        continue
+                    }
+                    val intervalSec = settings.pollIntervalSec.coerceIn(2, 60)
+                    delay(intervalSec * 1000L)
+                    if (isActive && _syncSettings.value.isSubdirMonitoring) {
+                        pollRealS3AndAutoEnqueue(force = false)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    Log.e("AetherViewModel", "Error in periodic polling loop", e)
+                    delay(5000L)
                 }
-                val intervalSec = settings.pollIntervalSec.coerceAtLeast(2)
-                delay(intervalSec * 1000L)
-                pollRealS3AndAutoEnqueue()
             }
         }
     }
 
-    private suspend fun pollRealS3AndAutoEnqueue() {
+    private suspend fun pollRealS3AndAutoEnqueue(force: Boolean = false) {
         val settings = _syncSettings.value
-        val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
-        val cleanTargetPrefix = activePlaylistPath.value.removePrefix("/")
+        val bucketName = _monitoredPlaylistBucket.value
+            ?: _selectedBucketName.value?.takeIf { it != "ALL" }
+            ?: settings.currentBucketName
+        if (bucketName.isBlank()) return
 
-        val existingTracks = repository.allTracks.first()
-        val knownTrackKeys = existingTracks.map { it.key }.toSet()
-        val currentQueueKeys = playlistQueue.value.map { it.key }.toSet()
+        val rawTarget = activePlaylistPath.value.trim().trim('/')
+        val cleanTargetPrefix = if (rawTarget.isBlank()) "" else "$rawTarget/"
+
+        val currentQueue = playlistQueue.value
+        val currentQueueKeys = currentQueue.map { it.key.trim().removePrefix("/") }.toSet()
+        val currentQueueFullKeys = currentQueue.map { it.key }.toSet()
         val allowedExts = settings.enabledFormats.map { it.removePrefix(".").lowercase() }.toSet()
 
         val result = repository.syncRemoteS3(
@@ -1102,19 +1200,29 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
 
-            // Filter tracks in the monitored directory that are newly uploaded
+            // Filter tracks in the monitored directory that are not yet in the playlist and not previously processed
             val rawNewTracks = listResult.tracks.filter { track ->
                 val cleanKey = track.key.trim().removePrefix("/")
-                val inTargetDir = if (_isRecursiveScan.value) {
+                val inTargetDir = if (cleanTargetPrefix.isNotBlank()) {
                     cleanKey.startsWith(cleanTargetPrefix)
                 } else {
-                    cleanKey.startsWith(cleanTargetPrefix) && !cleanKey.removePrefix(cleanTargetPrefix).contains('/')
+                    _isRecursiveScan.value || !cleanKey.contains('/')
                 }
-                inTargetDir && track.key !in knownTrackKeys && track.key !in currentQueueKeys
+
+                val isAlreadyInQueue = cleanKey in currentQueueKeys || track.key in currentQueueFullKeys
+                val isAlreadyProcessed = cleanKey in processedMonitoredKeys || track.key in processedMonitoredKeys
+
+                inTargetDir && !isAlreadyInQueue && !isAlreadyProcessed
             }
             val newTracks = sortFolderTracks(rawNewTracks)
 
             if (newTracks.isNotEmpty()) {
+                // Register newly detected tracks as processed so they are not repeatedly re-added
+                newTracks.forEach { t ->
+                    processedMonitoredKeys.add(t.key)
+                    processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+                }
+
                 val playerStatus = audioEngine.playerState.value.status
                 val isCurrentlyPlaying = (playerStatus == PlaybackStatus.PLAYING ||
                         playerStatus == PlaybackStatus.BUFFERING ||
@@ -1123,7 +1231,6 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                 _realtimeBannerTrack.value = newTracks.first()
                 _isRealtimeBannerVisible.value = true
 
-                // Auto-enqueue rule (default "append": add to the end of the playlist)
                 withContext(Dispatchers.Main) {
                     when (settings.enqueueRule) {
                         "upnext" -> audioEngine.insertNextInQueue(newTracks)
@@ -1134,10 +1241,21 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
                     if (_isAutoPlayNewEnabled.value && !isCurrentlyPlaying) {
                         val trackToPlay = newTracks.first()
                         playTrackFromPlaylist(trackToPlay)
-                        _toastEvent.emit("检测到新音频上传，已加入列表末尾并自动播放：${trackToPlay.title}")
+                        _toastEvent.emit("检测到 S3 新增音频，已加入列表并自动播放：${trackToPlay.title}")
                     } else {
-                        _toastEvent.emit("监听到 ${newTracks.size} 个新音频上传，已加入播放列表末尾")
+                        _toastEvent.emit("检测到 S3 新增 ${newTracks.size} 首音频，已加入播放列表")
                     }
+                }
+            } else if (force) {
+                withContext(Dispatchers.Main) {
+                    val locDisplay = if (cleanTargetPrefix.isBlank()) "根目录 /" else cleanTargetPrefix
+                    _toastEvent.emit("当前目录 [s3://$bucketName/$locDisplay] 暂无未加入播放列表的新增音频")
+                }
+            }
+        }.onFailure { ex ->
+            if (force) {
+                withContext(Dispatchers.Main) {
+                    _toastEvent.emit("监听目录检测异常: ${ex.message}")
                 }
             }
         }

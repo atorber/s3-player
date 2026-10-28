@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -124,6 +125,7 @@ fun PlaylistScreen(
     onPlayNewArrival: () -> Unit,
     onToggleAutoPlayNew: () -> Unit = {},
     onToggleDirectoryMonitoring: () -> Unit = {},
+    onForceCheckNewUploads: () -> Unit = {},
     onToggleRepeat: () -> Unit,
     onClearPlayed: () -> Unit,
     onClearAll: () -> Unit = {},
@@ -837,6 +839,34 @@ fun PlaylistScreen(
                                 fontWeight = if (isDirectoryMonitoringEnabled) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isDirectoryMonitoringEnabled) AwsAmber else TextMediumContrast
                             )
+                        }
+                    }
+
+                    // 0.1 立即检测新增音频
+                    if (isDirectoryMonitoringEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(SurfaceContainer)
+                                .border(1.dp, BorderSubtle, RoundedCornerShape(7.dp))
+                                .clickable { onForceCheckNewUploads() }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .testTag("playlist_force_check_btn")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = "立即检测",
+                                    tint = TextMediumContrast,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "立即检测",
+                                    fontSize = 10.sp,
+                                    color = TextMediumContrast
+                                )
+                            }
                         }
                     }
 

@@ -216,7 +216,8 @@ fun MainScreen(viewModel: AetherViewModel) {
                 1 -> {
                     // Screen 2: 播放列表 (Playlist)
                     val activePlaylistPath by viewModel.activePlaylistPath.collectAsStateWithLifecycle()
-                    val activeBucket = selectedBucketName?.takeIf { it != "ALL" } ?: syncSettings.currentBucketName
+                    val monitoredBucket by viewModel.monitoredPlaylistBucket.collectAsStateWithLifecycle()
+                    val activeBucket = monitoredBucket ?: selectedBucketName?.takeIf { it != "ALL" } ?: syncSettings.currentBucketName
                     val displayLoc = "s3://$activeBucket/${activePlaylistPath.removePrefix("/")}"
                     PlaylistScreen(
                         tracks = playlistQueue,
@@ -243,6 +244,7 @@ fun MainScreen(viewModel: AetherViewModel) {
                         },
                         onToggleAutoPlayNew = viewModel::toggleAutoPlayNew,
                         onToggleDirectoryMonitoring = viewModel::toggleSubdirMonitoring,
+                        onForceCheckNewUploads = viewModel::forceCheckNewUploads,
                         onToggleRepeat = viewModel::toggleLoopMode,
                         onClearPlayed = viewModel::clearPlayedQueue,
                         onClearAll = viewModel::clearAllQueue,
