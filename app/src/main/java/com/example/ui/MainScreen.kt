@@ -255,9 +255,16 @@ fun MainScreen(viewModel: AetherViewModel) {
                     )
                 }
                 2 -> {
-                    // Screen 3: 同步设置 (Sync Settings)
+                    // Screen 3: 设置 (Settings & Version Update)
+                    val appUpdateStatus by viewModel.appUpdateStatus.collectAsStateWithLifecycle()
                     SyncSettingsScreen(
                         settings = syncSettings,
+                        updateStatus = appUpdateStatus,
+                        onCheckForUpdates = viewModel::checkForAppUpdates,
+                        onStartUpdate = viewModel::startAppUpdate,
+                        onCancelUpdate = viewModel::cancelAppUpdate,
+                        onDismissUpdate = viewModel::dismissAppUpdate,
+                        onInstallApk = viewModel::installDownloadedApk,
                         onUpdatePollInterval = viewModel::updatePollInterval,
                         onSetEnqueueRule = viewModel::setEnqueueRule,
                         onTogglePublicAccess = viewModel::togglePublicAccess,

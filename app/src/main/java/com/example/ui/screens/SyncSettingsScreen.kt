@@ -33,21 +33,27 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PublishedWithChanges
 import androidx.compose.material.icons.filled.Radar
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,12 +75,15 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.ui.SyncSettingsState
 import com.example.ui.theme.AetherSurface
 import com.example.ui.theme.AetherVoid
 import com.example.ui.theme.AwsAmber
 import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.ElectricCyanDim
+import com.example.ui.theme.StatusGreen
+import com.example.ui.theme.StatusRed
 import com.example.ui.theme.SurfaceContainer
 import com.example.ui.theme.SurfaceContainerHigh
 import com.example.ui.theme.SurfaceContainerHighest
@@ -83,6 +92,9 @@ import com.example.ui.theme.SurfaceContainerLowest
 import com.example.ui.theme.TextHighContrast
 import com.example.ui.theme.TextLowContrast
 import com.example.ui.theme.TextMediumContrast
+import com.example.util.AppUpdateInfo
+import com.example.util.UpdateStatus
+import java.io.File
 
 @Composable
 fun SyncSettingsScreen(
@@ -118,6 +130,12 @@ fun SyncSettingsScreen(
         isTlsEncrypted: Boolean,
         isPublicAccess: Boolean
     ) -> Unit,
+    updateStatus: UpdateStatus = UpdateStatus.Idle,
+    onCheckForUpdates: () -> Unit = {},
+    onStartUpdate: (AppUpdateInfo) -> Unit = {},
+    onCancelUpdate: () -> Unit = {},
+    onDismissUpdate: () -> Unit = {},
+    onInstallApk: (File) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var bucketInput by remember { mutableStateOf(settings.currentBucketName) }
@@ -1140,6 +1158,494 @@ fun SyncSettingsScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // 3. 应用版本与系统更新卡片 (GitHub Release 检查与在线升级)
+        // =========================================================================
+        var showUpdateDialog by remember { mutableStateOf(false) }
+
+        LaunchedEffect(updateStatus) {
+            if (updateStatus is UpdateStatus.Available) {
+                showUpdateDialog = true
+            }
+        }
+
+        // 弹窗提示有新版本
+        if (showUpdateDialog && updateStatus is UpdateStatus.Available) {
+            val info = (updateStatus as UpdateStatus.Available).info
+            AlertDialog(
+                onDismissRequest = {
+                    showUpdateDialog = false
+                    onDismissUpdate()
+                },
+                shape = RoundedCornerShape(14.dp),
+                containerColor = SurfaceContainerHighest,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.NewReleases,
+                        contentDescription = null,
+                        tint = AwsAmber,
+                        modifier = Modifier.size(28.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "发现新版本 v${info.latestVersionName}",
+                        fontWeight = FontWeight.Bold,
+                        color = TextHighContrast,
+                        fontSize = 16.sp
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (info.releaseTitle.isNotBlank()) info.releaseTitle else "版本更新",
+                            fontWeight = FontWeight.SemiBold,
+                            color = AwsAmber,
+                            fontSize = 13.sp
+                        )
+                        if (info.releaseNotes.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(SurfaceContainerLowest)
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    text = info.releaseNotes,
+                                    fontSize = 11.sp,
+                                    color = TextMediumContrast,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                        if (info.apkSize > 0) {
+                            val sizeMb = info.apkSize / (1024.0 * 1024.0)
+                            Text(
+                                text = "安装包体积: ${String.format("%.1f MB", sizeMb)}",
+                                fontSize = 11.sp,
+                                color = TextLowContrast
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showUpdateDialog = false
+                            onStartUpdate(info)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AwsAmber),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "立即更新",
+                            fontWeight = FontWeight.Bold,
+                            color = AetherVoid
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showUpdateDialog = false
+                            onDismissUpdate()
+                        }
+                    ) {
+                        Text(
+                            text = "稍后再说",
+                            color = TextLowContrast
+                        )
+                    }
+                }
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(SurfaceContainer)
+                .border(1.dp, SurfaceContainerHigh, RoundedCornerShape(12.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Card Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.SystemUpdate,
+                        contentDescription = null,
+                        tint = ElectricCyan,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "版本更新",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextHighContrast
+                    )
+                }
+
+                // Current Version Pill
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(SurfaceContainerLowest)
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ElectricCyan
+                    )
+                }
+            }
+
+            // Status and Actions
+            when (updateStatus) {
+                is UpdateStatus.Idle -> {
+                    Text(
+                        text = "从 GitHub Releases 检查官方最新发布的安装包，并支持在应用内直接下载升级。",
+                        fontSize = 11.sp,
+                        color = TextMediumContrast,
+                        lineHeight = 16.sp
+                    )
+                    Button(
+                        onClick = { onCheckForUpdates() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(38.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceContainerHigh),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = ElectricCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "检查新版本",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextHighContrast
+                        )
+                    }
+                }
+
+                is UpdateStatus.Checking -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerLowest)
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = AwsAmber,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "正在检查 GitHub Release 最新版本...",
+                            fontSize = 11.sp,
+                            color = TextMediumContrast
+                        )
+                    }
+                }
+
+                is UpdateStatus.UpToDate -> {
+                    val info = updateStatus.info
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerLowest)
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = StatusGreen,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "当前已是最新版本 (v${info.currentVersionName})",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = StatusGreen
+                            )
+                        }
+                        Text(
+                            text = "已连接 GitHub Release 确认无更高版本更新。",
+                            fontSize = 11.sp,
+                            color = TextLowContrast
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { onCheckForUpdates() },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceContainerHigh),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text("重新检查", fontSize = 11.sp, color = TextHighContrast)
+                            }
+                            Button(
+                                onClick = { onStartUpdate(info) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceContainerHigh),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text("重装当前包", fontSize = 11.sp, color = AwsAmber)
+                            }
+                        }
+                    }
+                }
+
+                is UpdateStatus.Available -> {
+                    val info = updateStatus.info
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerLowest)
+                            .border(1.dp, AwsAmber.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.NewReleases,
+                                    contentDescription = null,
+                                    tint = AwsAmber,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "发现新版本: v${info.latestVersionName}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AwsAmber
+                                )
+                            }
+                            if (info.apkSize > 0) {
+                                Text(
+                                    text = String.format("%.1f MB", info.apkSize / (1024.0 * 1024.0)),
+                                    fontSize = 10.sp,
+                                    color = TextLowContrast
+                                )
+                            }
+                        }
+
+                        if (info.releaseNotes.isNotBlank()) {
+                            Text(
+                                text = info.releaseNotes,
+                                fontSize = 11.sp,
+                                color = TextMediumContrast,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { onDismissUpdate() },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(36.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceContainerHigh),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text("稍后再说", fontSize = 11.sp, color = TextLowContrast)
+                            }
+                            Button(
+                                onClick = { onStartUpdate(info) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(36.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AwsAmber),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text("立即更新", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AetherVoid)
+                            }
+                        }
+                    }
+                }
+
+                is UpdateStatus.Downloading -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerLowest)
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "正在下载更新包 (v${updateStatus.info.latestVersionName})...",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ElectricCyan
+                            )
+                            val pct = (updateStatus.progress * 100).toInt()
+                            Text(
+                                text = "$pct%",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ElectricCyan
+                            )
+                        }
+
+                        LinearProgressIndicator(
+                            progress = { updateStatus.progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = ElectricCyan,
+                            trackColor = SurfaceContainerHigh
+                        )
+
+                        val downloadedMb = updateStatus.downloadedBytes / (1024.0 * 1024.0)
+                        val totalMb = if (updateStatus.totalBytes > 0) updateStatus.totalBytes / (1024.0 * 1024.0) else 0.0
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (totalMb > 0) String.format("%.1f MB / %.1f MB", downloadedMb, totalMb)
+                                       else String.format("%.1f MB", downloadedMb),
+                                fontSize = 10.sp,
+                                color = TextLowContrast
+                            )
+                            Text(
+                                text = "取消",
+                                fontSize = 11.sp,
+                                color = StatusRed,
+                                modifier = Modifier.clickable { onCancelUpdate() }
+                            )
+                        }
+                    }
+                }
+
+                is UpdateStatus.ReadyToInstall -> {
+                    val apkFile = updateStatus.apkFile
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerLowest)
+                            .border(1.dp, StatusGreen.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = StatusGreen,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "安装包已下载完成",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = StatusGreen
+                            )
+                        }
+                        Text(
+                            text = "如系统安装器未自动调起或被关闭，请点击下方按钮手动完成升级：",
+                            fontSize = 11.sp,
+                            color = TextMediumContrast
+                        )
+                        Button(
+                            onClick = { onInstallApk(apkFile) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = StatusGreen),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "立即安装升级",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                is UpdateStatus.Error -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceContainerLowest)
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = updateStatus.message,
+                            fontSize = 11.sp,
+                            color = StatusRed
+                        )
+                        Button(
+                            onClick = { onCheckForUpdates() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(34.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceContainerHigh),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("重试", fontSize = 11.sp, color = TextHighContrast)
                         }
                     }
                 }

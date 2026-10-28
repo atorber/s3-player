@@ -63,7 +63,7 @@ fun AetherTopBar(
     val tabName = when (activeTab) {
         0 -> "文件浏览"
         1 -> "播放列表"
-        2 -> "同步设置"
+        2 -> "设置"
         else -> "文件浏览"
     }
 

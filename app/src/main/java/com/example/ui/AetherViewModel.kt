@@ -37,7 +37,7 @@ data class UiNavigationState(
     val isExpandedPlayerVisible: Boolean = false,
     val isTelemetryInspectorVisible: Boolean = false,
     val isMountBucketDialogVisible: Boolean = false,
-    val activeTab: Int = 0 // 0: 文件浏览, 1: 播放列表, 2: 同步设置
+    val activeTab: Int = 0 // 0: 文件浏览, 1: 播放列表, 2: 设置
 )
 
 enum class TrackSortMode(val label: String) {
@@ -123,6 +123,30 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _isRealtimeBannerVisible = MutableStateFlow(false)
     val isRealtimeBannerVisible: StateFlow<Boolean> = _isRealtimeBannerVisible.asStateFlow()
+
+    // App Update Manager
+    val appUpdateManager = com.example.util.AppUpdateManager(application, viewModelScope)
+    val appUpdateStatus: StateFlow<com.example.util.UpdateStatus> = appUpdateManager.status
+
+    fun checkForAppUpdates() {
+        appUpdateManager.checkForUpdates()
+    }
+
+    fun startAppUpdate(info: com.example.util.AppUpdateInfo) {
+        appUpdateManager.startDownload(info)
+    }
+
+    fun cancelAppUpdate() {
+        appUpdateManager.cancelDownload()
+    }
+
+    fun dismissAppUpdate() {
+        appUpdateManager.dismissUpdate()
+    }
+
+    fun installDownloadedApk(apkFile: java.io.File) {
+        appUpdateManager.installApk(apkFile)
+    }
 
     // Recursive scan toggle in browser (false = strict tier-by-tier navigation)
     private val _isRecursiveScan = MutableStateFlow(false)
