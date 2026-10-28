@@ -894,8 +894,9 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             preferences.discoveredFolders = emptySet()
             _customFolders.value = emptySet()
 
-            // Clear previous bucket tracks from local DB so only the newly configured bucket's real data exists
+            // Clear previous bucket tracks and processed keys so the newly configured bucket starts clean
             repository.clearAllTracks()
+            processedMonitoredKeys.clear()
 
             val bucket = S3Bucket(
                 bucketName = cleanBucket,
@@ -920,13 +921,14 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val normPrefix = cleanPrefix.trim().trim('/')
             val initialPrefix = if (normPrefix.isBlank()) "" else "$normPrefix/"
             _currentPrefix.value = initialPrefix
+            updateMonitoredPlaylistPrefix(initialPrefix, cleanBucket)
 
-            _syncSettings.update { it.copy(isSaving = false) }
             val protocolPrefix = if (isTlsEncrypted) "https://" else "http://"
             _toastEvent.emit("S3 存储桶配置已保存 · 正在从云端读取 s3://$cleanBucket$initialPrefix ($protocolPrefix$cleanEndpoint)...")
 
-            // Real S3 remote scan
-            scanRealS3(initialPrefix)
+            // Real S3 remote scan: populate baseline tracks into processedMonitoredKeys before releasing isSaving
+            scanRealS3Internal(initialPrefix)
+            _syncSettings.update { it.copy(isSaving = false) }
         }
     }
 
@@ -1163,6 +1165,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun pollRealS3AndAutoEnqueue(force: Boolean = false) {
         val settings = _syncSettings.value
+        if (settings.isSaving || _isScanning.value) return
         val bucketName = _monitoredPlaylistBucket.value
             ?: _selectedBucketName.value?.takeIf { it != "ALL" }
             ?: settings.currentBucketName
@@ -1263,82 +1266,92 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
 
     fun scanRealS3(targetPrefix: String = _currentPrefix.value) {
         viewModelScope.launch {
-            _isScanning.value = true
-            val settings = _syncSettings.value
-            val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
-            val normTarget = if (targetPrefix == "/") "" else targetPrefix.trim().trim('/')
-            val cleanTargetPrefix = if (normTarget.isBlank()) "" else "$normTarget/"
+            scanRealS3Internal(targetPrefix)
+        }
+    }
 
-            val allowedExts = settings.enabledFormats.map { it.removePrefix(".").lowercase() }.toSet()
+    private suspend fun scanRealS3Internal(targetPrefix: String = _currentPrefix.value) {
+        _isScanning.value = true
+        val settings = _syncSettings.value
+        val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
+        val normTarget = if (targetPrefix == "/") "" else targetPrefix.trim().trim('/')
+        val cleanTargetPrefix = if (normTarget.isBlank()) "" else "$normTarget/"
 
-            // 1. Stage 1: Fast directory discovery with delimiter="/" to capture all immediate subfolders (including empty folders)
-            val dirResult = repository.syncRemoteS3(
-                endpoint = settings.endpoint,
-                bucketName = bucketName,
-                prefix = cleanTargetPrefix,
-                delimiter = "/",
-                region = settings.region,
-                accessKeyId = settings.accessKeyId,
-                secretAccessKey = settings.secretAccessKey,
-                sessionToken = settings.sessionToken,
-                usePathStyle = settings.usePathStyle,
-                useTls = settings.isTlsEncrypted,
-                isPublicAccess = settings.isPublicAccess,
-                allowedExtensions = allowedExts
-            )
-            dirResult.onSuccess { dirList ->
-                if (dirList.commonPrefixes.isNotEmpty()) {
-                    _customFolders.update { current ->
-                        val updated = (current + dirList.commonPrefixes).toSet()
-                        preferences.discoveredFolders = updated
-                        updated
-                    }
+        val allowedExts = settings.enabledFormats.map { it.removePrefix(".").lowercase() }.toSet()
+
+        // 1. Stage 1: Fast directory discovery with delimiter="/" to capture all immediate subfolders (including empty folders)
+        val dirResult = repository.syncRemoteS3(
+            endpoint = settings.endpoint,
+            bucketName = bucketName,
+            prefix = cleanTargetPrefix,
+            delimiter = "/",
+            region = settings.region,
+            accessKeyId = settings.accessKeyId,
+            secretAccessKey = settings.secretAccessKey,
+            sessionToken = settings.sessionToken,
+            usePathStyle = settings.usePathStyle,
+            useTls = settings.isTlsEncrypted,
+            isPublicAccess = settings.isPublicAccess,
+            allowedExtensions = allowedExts
+        )
+        dirResult.onSuccess { dirList ->
+            if (dirList.commonPrefixes.isNotEmpty()) {
+                _customFolders.update { current ->
+                    val updated = (current + dirList.commonPrefixes).toSet()
+                    preferences.discoveredFolders = updated
+                    updated
                 }
             }
+        }
 
-            // 2. Stage 2: Deep recursive scan with delimiter="" and multi-page pagination to fetch all nested audio tracks and ancestor directories
-            val result = repository.syncRemoteS3(
-                endpoint = settings.endpoint,
-                bucketName = bucketName,
-                prefix = cleanTargetPrefix,
-                delimiter = "",
-                region = settings.region,
-                accessKeyId = settings.accessKeyId,
-                secretAccessKey = settings.secretAccessKey,
-                sessionToken = settings.sessionToken,
-                usePathStyle = settings.usePathStyle,
-                useTls = settings.isTlsEncrypted,
-                isPublicAccess = settings.isPublicAccess,
-                allowedExtensions = allowedExts
-            )
+        // 2. Stage 2: Deep recursive scan with delimiter="" and multi-page pagination to fetch all nested audio tracks and ancestor directories
+        val result = repository.syncRemoteS3(
+            endpoint = settings.endpoint,
+            bucketName = bucketName,
+            prefix = cleanTargetPrefix,
+            delimiter = "",
+            region = settings.region,
+            accessKeyId = settings.accessKeyId,
+            secretAccessKey = settings.secretAccessKey,
+            sessionToken = settings.sessionToken,
+            usePathStyle = settings.usePathStyle,
+            useTls = settings.isTlsEncrypted,
+            isPublicAccess = settings.isPublicAccess,
+            allowedExtensions = allowedExts
+        )
 
-            _isScanning.value = false
-            result.onSuccess { listResult ->
-                if (listResult.commonPrefixes.isNotEmpty()) {
-                    _customFolders.update { current ->
-                        val updated = (current + listResult.commonPrefixes).toSet()
-                        preferences.discoveredFolders = updated
-                        updated
-                    }
+        _isScanning.value = false
+        result.onSuccess { listResult ->
+            if (listResult.commonPrefixes.isNotEmpty()) {
+                _customFolders.update { current ->
+                    val updated = (current + listResult.commonPrefixes).toSet()
+                    preferences.discoveredFolders = updated
+                    updated
                 }
-                val directTracksCount = listResult.tracks.count { track ->
-                    val cleanKey = track.key.trim().removePrefix("/")
-                    cleanKey.startsWith(cleanTargetPrefix) && !cleanKey.removePrefix(cleanTargetPrefix).contains('/')
-                }
-                val audioDirsCount = listResult.tracks
-                    .mapNotNull { track ->
-                        val rel = track.key.trim().removePrefix("/").removePrefix(cleanTargetPrefix)
-                        if (rel.contains('/')) rel.substringBefore('/') else null
-                    }
-                    .distinct()
-                    .size
-                val pathDisplay = if (cleanTargetPrefix.isBlank()) "根目录 /" else "/$cleanTargetPrefix"
-
-                _toastEvent.emit("S3 同步完成 [$pathDisplay]：发现 $audioDirsCount 个音频目录，当前层级 $directTracksCount 首音频 (共扫描 ${listResult.tracks.size} 首)")
-            }.onFailure { ex ->
-                val errorMsg = ex.message ?: "网络或认证异常"
-                _toastEvent.emit("S3 同步失败：$errorMsg")
             }
+            // Register all scanned tracks as processed baseline so background polling does not treat existing files as "new uploads"
+            listResult.tracks.forEach { t ->
+                processedMonitoredKeys.add(t.key)
+                processedMonitoredKeys.add(t.key.trim().removePrefix("/"))
+            }
+
+            val directTracksCount = listResult.tracks.count { track ->
+                val cleanKey = track.key.trim().removePrefix("/")
+                cleanKey.startsWith(cleanTargetPrefix) && !cleanKey.removePrefix(cleanTargetPrefix).contains('/')
+            }
+            val audioDirsCount = listResult.tracks
+                .mapNotNull { track ->
+                    val rel = track.key.trim().removePrefix("/").removePrefix(cleanTargetPrefix)
+                    if (rel.contains('/')) rel.substringBefore('/') else null
+                }
+                .distinct()
+                .size
+            val pathDisplay = if (cleanTargetPrefix.isBlank()) "根目录 /" else "/$cleanTargetPrefix"
+
+            _toastEvent.emit("S3 同步完成 [$pathDisplay]：发现 $audioDirsCount 个音频目录，当前层级 $directTracksCount 首音频 (共扫描 ${listResult.tracks.size} 首)")
+        }.onFailure { ex ->
+            val errorMsg = ex.message ?: "网络或认证异常"
+            _toastEvent.emit("S3 同步失败：$errorMsg")
         }
     }
 

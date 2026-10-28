@@ -824,14 +824,18 @@ fun SyncSettingsScreen(
                         isPublicAccess
                     )
                 },
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = SurfaceContainerHigh),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
-                    .weight(0.36f)
+                    .weight(0.38f)
                     .height(44.dp)
                     .testTag("ping_test_btn")
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     if (settings.isPinging) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(15.dp),
@@ -846,13 +850,15 @@ fun SyncSettingsScreen(
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "连通测速",
                         fontFamily = FontFamily.SansSerif,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = ElectricCyan
+                        color = ElectricCyan,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
@@ -873,15 +879,19 @@ fun SyncSettingsScreen(
                         isPublicAccess
                     )
                 },
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AwsAmber),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
-                    .weight(0.64f)
+                    .weight(0.62f)
                     .height(44.dp)
                     .shadow(10.dp, RoundedCornerShape(10.dp), spotColor = AwsAmber.copy(alpha = 0.4f))
                     .testTag("save_restart_btn")
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     if (settings.isSaving) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
@@ -896,13 +906,15 @@ fun SyncSettingsScreen(
                             modifier = Modifier.size(17.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (isDirty) "保存修改并生效 *" else "保存并重启监听",
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = AetherVoid
+                        color = AetherVoid,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }

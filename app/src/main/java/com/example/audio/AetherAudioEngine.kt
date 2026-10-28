@@ -235,14 +235,21 @@ class AetherAudioEngine private constructor(
     }
 
     fun addToQueue(track: S3AudioTrack) {
-        if (!queue.any { it.key == track.key && it.bucketName == track.bucketName }) {
+        val alreadyInQueue = queue.any { it.key == track.key && it.bucketName == track.bucketName }
+        if (!alreadyInQueue) {
             queue = queue + track
         }
-        if (_playerState.value.currentTrack == null) {
-            playTrack(track)
-        } else {
-            persistQueueState()
+        if (_playerState.value.currentTrack == null && queue.isNotEmpty()) {
+            currentIndex = 0
+            _playerState.update {
+                it.copy(
+                    currentTrack = queue.first(),
+                    currentPositionMs = 0L,
+                    durationMs = queue.first().durationMs
+                )
+            }
         }
+        persistQueueState()
     }
 
     fun addAllToQueue(tracks: List<S3AudioTrack>) {
