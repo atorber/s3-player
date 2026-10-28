@@ -248,8 +248,9 @@ fun TelemetryInspectorScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             InfoRow("音频名称", track?.title ?: "未加载")
-            InfoRow("S3 存储桶", track?.bucketName ?: telemetry.bucketName.ifBlank { "默认存储桶" })
+            InfoRow("S3 存储桶", track?.bucketName ?: "默认存储桶")
             InfoRow("网络延迟 (RTT)", "${telemetry.latencyMs} ms")
+            InfoRow("边缘节点", telemetry.s3RegionEdge)
             InfoRow("音频格式", track?.format?.uppercase() ?: "FLAC")
             InfoRow("音频采样率", track?.sampleRate ?: "44.1 kHz")
             InfoRow("声 道", track?.channels ?: "Stereo 双声道")
