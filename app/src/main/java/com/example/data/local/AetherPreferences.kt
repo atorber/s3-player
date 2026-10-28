@@ -90,4 +90,8 @@ class AetherPreferences(context: Context) {
     var sortModeName: String
         get() = prefs.getString("sortMode", "NAME_ASC") ?: "NAME_ASC"
         set(value) = prefs.edit().putString("sortMode", value).apply()
+
+    var discoveredFolders: Set<String>
+        get() = prefs.getStringSet("discovered_folders", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("discovered_folders", value).apply()
 }

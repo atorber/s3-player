@@ -157,7 +157,7 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
-    private val _customFolders = MutableStateFlow<Set<String>>(emptySet())
+    private val _customFolders = MutableStateFlow<Set<String>>(preferences.discoveredFolders)
 
     // Subdirectories discovery inside current bucket and prefix (immediate child directories)
     // Subdirectories discovery inside current bucket and prefix (immediate child directories of current path)
@@ -847,6 +847,8 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             preferences.usePathStyle = usePathStyle
             preferences.isTlsEncrypted = isTlsEncrypted
             preferences.isPublicAccess = isPublicAccess
+            preferences.discoveredFolders = emptySet()
+            _customFolders.value = emptySet()
 
             // Clear previous bucket tracks from local DB so only the newly configured bucket's real data exists
             repository.clearAllTracks()
@@ -871,15 +873,16 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             repository.addBucket(bucket)
             _selectedBucketName.value = cleanBucket
 
-            val scanPrefix = cleanPrefix.removePrefix("/")
-            _currentPrefix.value = scanPrefix
+            val normPrefix = cleanPrefix.trim().trim('/')
+            val initialPrefix = if (normPrefix.isBlank()) "" else "$normPrefix/"
+            _currentPrefix.value = initialPrefix
 
             _syncSettings.update { it.copy(isSaving = false) }
             val protocolPrefix = if (isTlsEncrypted) "https://" else "http://"
-            _toastEvent.emit("S3 存储桶配置已保存 · 正在从云端读取 s3://$cleanBucket$cleanPrefix ($protocolPrefix$cleanEndpoint)...")
+            _toastEvent.emit("S3 存储桶配置已保存 · 正在从云端读取 s3://$cleanBucket$initialPrefix ($protocolPrefix$cleanEndpoint)...")
 
             // Real S3 remote scan
-            scanRealS3(scanPrefix)
+            scanRealS3(initialPrefix)
         }
     }
 
@@ -1093,7 +1096,9 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         result.onSuccess { listResult ->
             if (listResult.commonPrefixes.isNotEmpty()) {
                 _customFolders.update { current ->
-                    (current + listResult.commonPrefixes).distinct().toSet()
+                    val updated = (current + listResult.commonPrefixes).toSet()
+                    preferences.discoveredFolders = updated
+                    updated
                 }
             }
 
@@ -1143,12 +1148,37 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             _isScanning.value = true
             val settings = _syncSettings.value
             val bucketName = _selectedBucketName.value?.takeIf { it != "ALL" } ?: settings.currentBucketName
-            val cleanTargetPrefix = if (targetPrefix == "/") "" else targetPrefix.removePrefix("/")
+            val normTarget = if (targetPrefix == "/") "" else targetPrefix.trim().trim('/')
+            val cleanTargetPrefix = if (normTarget.isBlank()) "" else "$normTarget/"
 
             val allowedExts = settings.enabledFormats.map { it.removePrefix(".").lowercase() }.toSet()
 
-            // Scan recursively (delimiter = "") so all subdirectories under cleanTargetPrefix
-            // that contain audio files are automatically discovered along with their track counts
+            // 1. Stage 1: Fast directory discovery with delimiter="/" to capture all immediate subfolders (including empty folders)
+            val dirResult = repository.syncRemoteS3(
+                endpoint = settings.endpoint,
+                bucketName = bucketName,
+                prefix = cleanTargetPrefix,
+                delimiter = "/",
+                region = settings.region,
+                accessKeyId = settings.accessKeyId,
+                secretAccessKey = settings.secretAccessKey,
+                sessionToken = settings.sessionToken,
+                usePathStyle = settings.usePathStyle,
+                useTls = settings.isTlsEncrypted,
+                isPublicAccess = settings.isPublicAccess,
+                allowedExtensions = allowedExts
+            )
+            dirResult.onSuccess { dirList ->
+                if (dirList.commonPrefixes.isNotEmpty()) {
+                    _customFolders.update { current ->
+                        val updated = (current + dirList.commonPrefixes).toSet()
+                        preferences.discoveredFolders = updated
+                        updated
+                    }
+                }
+            }
+
+            // 2. Stage 2: Deep recursive scan with delimiter="" and multi-page pagination to fetch all nested audio tracks and ancestor directories
             val result = repository.syncRemoteS3(
                 endpoint = settings.endpoint,
                 bucketName = bucketName,
@@ -1168,7 +1198,9 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             result.onSuccess { listResult ->
                 if (listResult.commonPrefixes.isNotEmpty()) {
                     _customFolders.update { current ->
-                        (current + listResult.commonPrefixes).distinct().toSet()
+                        val updated = (current + listResult.commonPrefixes).toSet()
+                        preferences.discoveredFolders = updated
+                        updated
                     }
                 }
                 val directTracksCount = listResult.tracks.count { track ->
@@ -1368,7 +1400,11 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
             val clean = folderName.trim().removePrefix("/").removeSuffix("/")
             if (clean.isNotBlank()) {
                 val full = "${_currentPrefix.value}$clean/"
-                _customFolders.update { it + full }
+                _customFolders.update { current ->
+                    val updated = (current + full).toSet()
+                    preferences.discoveredFolders = updated
+                    updated
+                }
                 _isNewFolderDialogVisible.value = false
                 _toastEvent.emit("已新建 S3 目录前缀: $full")
             }

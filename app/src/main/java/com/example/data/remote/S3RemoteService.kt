@@ -196,7 +196,7 @@ class S3RemoteService(
         parser.setInput(StringReader(xml))
 
         var eventType = parser.eventType
-        var currentTag = ""
+        val tagTextBuilder = StringBuilder()
 
         // Temporary object fields
         var inContents = false
@@ -210,8 +210,8 @@ class S3RemoteService(
         while (eventType != XmlPullParser.END_DOCUMENT) {
             when (eventType) {
                 XmlPullParser.START_TAG -> {
-                    currentTag = parser.name
-                    when (currentTag) {
+                    tagTextBuilder.setLength(0)
+                    when (parser.name) {
                         "Contents" -> {
                             inContents = true
                             currentKey = ""
@@ -226,85 +226,105 @@ class S3RemoteService(
                     }
                 }
                 XmlPullParser.TEXT -> {
-                    val text = parser.text?.trim() ?: ""
-                    if (text.isNotBlank()) {
-                        when {
-                            inContents -> {
-                                when (currentTag) {
-                                    "Key" -> currentKey = text
-                                    "Size" -> currentSize = text.toLongOrNull() ?: 0L
-                                    "LastModified" -> currentLastModified = text
-                                    "ETag" -> currentEtag = text.replace("\"", "")
-                                    "StorageClass" -> currentStorageClass = text
-                                }
-                            }
-                            inCommonPrefixes -> {
-                                if (currentTag == "Prefix") {
-                                    commonPrefixes.add(text)
-                                }
-                            }
-                            currentTag == "IsTruncated" -> {
-                                isTruncated = text.equals("true", ignoreCase = true)
-                            }
-                            currentTag == "NextContinuationToken" -> {
-                                nextContinuationToken = text
-                            }
-                        }
-                    }
+                    tagTextBuilder.append(parser.text ?: "")
                 }
                 XmlPullParser.END_TAG -> {
-                    when (parser.name) {
-                        "Contents" -> {
-                            inContents = false
-                            if (currentKey.isNotBlank() && !currentKey.endsWith("/")) {
-                                val ext = currentKey.substringAfterLast('.', "").lowercase()
-                                if (ext in activeExtensions) {
-                                    val fileName = currentKey.substringAfterLast('/')
-                                    val streamUrl = buildPlayableStreamUrl(
-                                        bucketName = bucketName,
-                                        endpoint = endpoint,
-                                        key = currentKey,
-                                        usePathStyle = usePathStyle,
-                                        useTls = useTls,
-                                        region = region,
-                                        accessKeyId = accessKeyId,
-                                        secretAccessKey = secretAccessKey,
-                                        sessionToken = sessionToken,
-                                        isPublicAccess = isPublicAccess
-                                    )
+                    val text = tagTextBuilder.toString().trim()
+                    when {
+                        inContents -> {
+                            when (parser.name) {
+                                "Key" -> currentKey = text
+                                "Size" -> currentSize = text.toLongOrNull() ?: 0L
+                                "LastModified" -> currentLastModified = text
+                                "ETag" -> currentEtag = text.replace("\"", "")
+                                "StorageClass" -> currentStorageClass = text
+                                "Contents" -> {
+                                    inContents = false
+                                    if (currentKey.isNotBlank()) {
+                                        if (currentKey.endsWith("/")) {
+                                            // Explicit directory marker in S3 (e.g. 0-byte key created by S3 console or tools)
+                                            commonPrefixes.add(currentKey)
+                                        } else {
+                                            // Extract all intermediate directory paths
+                                            val parts = currentKey.split('/')
+                                            var pathAcc = ""
+                                            for (i in 0 until parts.size - 1) {
+                                                pathAcc += "${parts[i]}/"
+                                                commonPrefixes.add(pathAcc)
+                                            }
 
-                                    // Estimate rough duration based on file size and format bitrate
-                                    val durationSec = estimateAudioDurationSec(currentSize, ext)
+                                            val ext = currentKey.substringAfterLast('.', "").lowercase()
+                                            if (ext in activeExtensions) {
+                                                val fileName = currentKey.substringAfterLast('/')
+                                                val streamUrl = buildPlayableStreamUrl(
+                                                    bucketName = bucketName,
+                                                    endpoint = endpoint,
+                                                    key = currentKey,
+                                                    usePathStyle = usePathStyle,
+                                                    useTls = useTls,
+                                                    region = region,
+                                                    accessKeyId = accessKeyId,
+                                                    secretAccessKey = secretAccessKey,
+                                                    sessionToken = sessionToken,
+                                                    isPublicAccess = isPublicAccess
+                                                )
 
-                                    tracks.add(
-                                        S3AudioTrack(
-                                            id = 0, // auto-generated by Room
-                                            bucketName = bucketName,
-                                            key = currentKey,
-                                            title = fileName,
-                                            artistOrProject = "S3 远端对象 · $bucketName",
-                                            format = ext.uppercase(),
-                                            sampleRate = if (ext == "flac" || ext == "wav") "48kHz / 24-bit" else "44.1kHz / 16-bit",
-                                            channels = "2.0 Stereo",
-                                            sizeBytes = currentSize,
-                                            durationMs = durationSec * 1000L,
-                                            etag = currentEtag,
-                                            storageClass = currentStorageClass,
-                                            streamUrl = streamUrl,
-                                            isCachedLocally = false,
-                                            waveformPointsRaw = generateSimpleWaveform(currentKey),
-                                            isFavorite = false,
-                                            lastModified = formatIsoTimestamp(currentLastModified)
-                                        )
-                                    )
+                                                // Estimate rough duration based on file size and format bitrate
+                                                val durationSec = estimateAudioDurationSec(currentSize, ext)
+
+                                                tracks.add(
+                                                    S3AudioTrack(
+                                                        id = 0, // auto-generated by Room
+                                                        bucketName = bucketName,
+                                                        key = currentKey,
+                                                        title = fileName,
+                                                        artistOrProject = "S3 远端对象 · $bucketName",
+                                                        format = ext.uppercase(),
+                                                        sampleRate = if (ext == "flac" || ext == "wav") "48kHz / 24-bit" else "44.1kHz / 16-bit",
+                                                        channels = "2.0 Stereo",
+                                                        sizeBytes = currentSize,
+                                                        durationMs = durationSec * 1000L,
+                                                        etag = currentEtag,
+                                                        storageClass = currentStorageClass,
+                                                        streamUrl = streamUrl,
+                                                        isCachedLocally = false,
+                                                        waveformPointsRaw = generateSimpleWaveform(currentKey),
+                                                        isFavorite = false,
+                                                        lastModified = formatIsoTimestamp(currentLastModified)
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                        "CommonPrefixes" -> {
-                            inCommonPrefixes = false
+                        inCommonPrefixes -> {
+                            when (parser.name) {
+                                "Prefix" -> {
+                                    if (text.isNotBlank()) {
+                                        commonPrefixes.add(text)
+                                    }
+                                }
+                                "CommonPrefixes" -> {
+                                    inCommonPrefixes = false
+                                }
+                            }
+                        }
+                        else -> {
+                            when (parser.name) {
+                                "IsTruncated" -> {
+                                    isTruncated = text.equals("true", ignoreCase = true)
+                                }
+                                "NextContinuationToken" -> {
+                                    if (text.isNotBlank()) {
+                                        nextContinuationToken = text
+                                    }
+                                }
+                            }
                         }
                     }
-                    currentTag = ""
+                    tagTextBuilder.setLength(0)
                 }
             }
             eventType = parser.next()

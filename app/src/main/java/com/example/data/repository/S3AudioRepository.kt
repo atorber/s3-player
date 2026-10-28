@@ -82,7 +82,7 @@ class S3AudioRepository(
     }
 
     /**
-     * Reads real S3 objects and common prefixes from the remote server
+     * Reads real S3 objects and common prefixes from the remote server with automatic pagination
      */
     suspend fun syncRemoteS3(
         endpoint: String,
@@ -97,29 +97,58 @@ class S3AudioRepository(
         usePathStyle: Boolean = false,
         useTls: Boolean = true,
         isPublicAccess: Boolean = false,
-        allowedExtensions: Set<String>? = null
+        allowedExtensions: Set<String>? = null,
+        maxPages: Int = 100
     ): Result<S3ListResult> = withContext(Dispatchers.IO) {
-        val result = remoteService.listObjectsV2(
-            endpoint = endpoint,
-            bucketName = bucketName,
-            prefix = prefix,
-            delimiter = delimiter,
-            region = region,
-            accessKeyId = accessKeyId,
-            secretAccessKey = secretAccessKey,
-            sessionToken = sessionToken,
-            continuationToken = continuationToken,
-            usePathStyle = usePathStyle,
-            useTls = useTls,
-            isPublicAccess = isPublicAccess,
-            allowedExtensions = allowedExtensions
-        )
+        val allTracks = mutableListOf<S3AudioTrack>()
+        val allCommonPrefixes = mutableSetOf<String>()
+        var currentToken: String? = continuationToken
+        var isTruncated = false
+        var pagesFetched = 0
 
-        result.onSuccess { listResult ->
+        try {
+            do {
+                pagesFetched++
+                val pageResult = remoteService.listObjectsV2(
+                    endpoint = endpoint,
+                    bucketName = bucketName,
+                    prefix = prefix,
+                    delimiter = delimiter,
+                    region = region,
+                    accessKeyId = accessKeyId,
+                    secretAccessKey = secretAccessKey,
+                    sessionToken = sessionToken,
+                    continuationToken = currentToken,
+                    usePathStyle = usePathStyle,
+                    useTls = useTls,
+                    isPublicAccess = isPublicAccess,
+                    allowedExtensions = allowedExtensions
+                )
+
+                if (pageResult.isFailure) {
+                    if (allTracks.isEmpty() && allCommonPrefixes.isEmpty()) {
+                        return@withContext pageResult
+                    } else {
+                        break
+                    }
+                }
+
+                val listResult = pageResult.getOrThrow()
+                allTracks.addAll(listResult.tracks)
+                allCommonPrefixes.addAll(listResult.commonPrefixes)
+
+                isTruncated = listResult.isTruncated
+                currentToken = if (isTruncated && !listResult.nextContinuationToken.isNullOrBlank()) {
+                    listResult.nextContinuationToken
+                } else {
+                    null
+                }
+            } while (currentToken != null && pagesFetched < maxPages)
+
             // Save real tracks into local database, preserving local status like favorite and cached
-            if (listResult.tracks.isNotEmpty()) {
+            if (allTracks.isNotEmpty()) {
                 val existingMap = trackDao.getAllTracksList().associateBy { "${it.bucketName}:${it.key}" }
-                val merged = listResult.tracks.map { remoteTrack ->
+                val merged = allTracks.map { remoteTrack ->
                     val existing = existingMap["${remoteTrack.bucketName}:${remoteTrack.key}"]
                     if (existing != null) {
                         remoteTrack.copy(
@@ -133,8 +162,17 @@ class S3AudioRepository(
                 }
                 trackDao.insertAll(merged)
             }
-        }
 
-        result
+            Result.success(
+                S3ListResult(
+                    tracks = allTracks,
+                    commonPrefixes = allCommonPrefixes.toList().distinct(),
+                    isTruncated = isTruncated,
+                    nextContinuationToken = currentToken
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }
